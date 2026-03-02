@@ -221,19 +221,24 @@ router.delete('/:id', async (req: AuthRequest, res: Response): Promise<void> => 
 router.get('/', async (req: AuthRequest, res: Response): Promise<void> => {
     try {
         if (req.user?.role !== 'admin') {
-            // Auto-generate daily tasks for employees if they don't exist for today
-            const checkDaily = await db.execute({
-                sql: "SELECT COUNT(*) as count FROM tasks WHERE assigned_to = ? AND type = 'daily' AND DATE(created_at, 'localtime') = DATE('now', 'localtime')",
+            // Fetch all recurring task templates assigned to the user
+            const recurringResult = await db.execute({
+                sql: 'SELECT * FROM recurring_tasks WHERE assigned_to = ?',
                 args: [req.user?.id!]
             });
 
-            if (Number(checkDaily.rows[0].count) === 0) {
-                const recurringResult = await db.execute({
-                    sql: 'SELECT * FROM recurring_tasks WHERE assigned_to = ?',
-                    args: [req.user?.id!]
-                });
+            // Fetch the daily tasks that have already been generated today for the user
+            const todaysTasksResult = await db.execute({
+                sql: "SELECT title FROM tasks WHERE assigned_to = ? AND type = 'daily' AND DATE(created_at, 'localtime') = DATE('now', 'localtime')",
+                args: [req.user?.id!]
+            });
 
-                for (const rt of recurringResult.rows) {
+            // Create a set of existing daily task titles for quick lookup
+            const existingTitles = new Set(todaysTasksResult.rows.map(r => r.title as string));
+
+            // Generate a new task for any recurring template that hasn't been instantiated today
+            for (const rt of recurringResult.rows) {
+                if (!existingTitles.has(rt.title as string)) {
                     await db.execute({
                         sql: 'INSERT INTO tasks (id, title, description, type, assigned_to) VALUES (?, ?, ?, ?, ?)',
                         args: [generateId(), rt.title as string, rt.description ? (rt.description as string) : null, 'daily', req.user?.id!]
