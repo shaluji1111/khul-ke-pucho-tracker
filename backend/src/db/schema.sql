@@ -28,9 +28,11 @@ CREATE TABLE IF NOT EXISTS tasks (
     assigned_to TEXT NOT NULL,
     status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'in_progress', 'completed')),
     deadline DATETIME,
+    created_by TEXT,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     completed_at DATETIME,
-    FOREIGN KEY (assigned_to) REFERENCES users(id) ON DELETE CASCADE
+    FOREIGN KEY (assigned_to) REFERENCES users(id) ON DELETE CASCADE,
+    FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE SET NULL
 );
 
 -- Indexes for performance

@@ -1,7 +1,11 @@
 import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
 
-const JWT_SECRET = process.env.JWT_SECRET || 'supersecret';
+const JWT_SECRET = process.env.JWT_SECRET;
+if (!JWT_SECRET && process.env.NODE_ENV === 'production') {
+    throw new Error('JWT_SECRET must be set in production');
+}
+const SECRET = JWT_SECRET || 'supersecret';
 
 export interface AuthRequest extends Request {
     user?: {
@@ -19,7 +23,7 @@ export const authenticateToken = (req: AuthRequest, res: Response, next: NextFun
         return;
     }
 
-    jwt.verify(token, JWT_SECRET, (err, user) => {
+    jwt.verify(token, SECRET, (err, user) => {
         if (err) {
             res.sendStatus(403);
             return;

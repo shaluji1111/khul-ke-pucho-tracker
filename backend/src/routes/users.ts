@@ -1,10 +1,11 @@
 import { Router, Request, Response } from 'express';
 import bcrypt from 'bcryptjs';
+import { randomUUID } from 'crypto';
 import { db } from '../db/client';
 import { authenticateToken, requireAdmin } from '../middleware/auth';
 
 const router = Router();
-const generateId = () => Math.random().toString(36).substring(2, 11);
+const generateId = () => randomUUID();
 
 // All user routes require admin
 router.use(authenticateToken, requireAdmin);
@@ -15,6 +16,7 @@ router.get('/', async (req: Request, res: Response): Promise<void> => {
         const result = await db.execute('SELECT id, name, full_name, designation, role, created_at FROM users');
         res.json(result.rows);
     } catch (error) {
+        console.error('Error fetching users:', error);
         res.status(500).json({ error: 'Failed to fetch users' });
     }
 });
@@ -22,13 +24,24 @@ router.get('/', async (req: Request, res: Response): Promise<void> => {
 // Create new user
 router.post('/', async (req: Request, res: Response): Promise<void> => {
     const { name, full_name, role, password, designation } = req.body;
-    if (!name || !role || !password) {
-        res.status(400).json({ error: 'JS ID (name), role, and password required' });
+    if (!name || typeof name !== 'string' || name.length > 50) {
+        res.status(400).json({ error: 'JS ID (name) is required and must be under 50 characters' });
         return;
     }
-
-    if (role !== 'admin' && role !== 'employee') {
-        res.status(400).json({ error: 'Invalid role' });
+    if (!role || (role !== 'admin' && role !== 'employee')) {
+        res.status(400).json({ error: 'Valid role is required (admin or employee)' });
+        return;
+    }
+    if (!password || typeof password !== 'string' || password.length < 8 || password.length > 100) {
+        res.status(400).json({ error: 'Password must be between 8 and 100 characters' });
+        return;
+    }
+    if (full_name && (typeof full_name !== 'string' || full_name.length > 100)) {
+        res.status(400).json({ error: 'Full name must be under 100 characters' });
+        return;
+    }
+    if (designation && (typeof designation !== 'string' || designation.length > 100)) {
+        res.status(400).json({ error: 'Designation must be under 100 characters' });
         return;
     }
 
