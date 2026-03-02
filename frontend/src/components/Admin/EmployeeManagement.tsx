@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { UserPlus, Trash2, Shield, User, Pencil } from 'lucide-react';
-import api from '../../api/client';
+import api from "../../api/client";
 
 export default function EmployeeManagement() {
     const [users, setUsers] = useState<any[]>([]);

@@ -1,12 +1,14 @@
 import { useState, useEffect } from 'react';
-import { Target, Trophy, Flame, RefreshCw } from 'lucide-react';
-import api from '../../api/client';
+import { Target, Trophy, Flame, RefreshCw, Info } from 'lucide-react';
+import api from "../../api/client";
+import EmployeeReportModal from './EmployeeReportModal';
 
 export default function PerformanceDashboard() {
     const [metrics, setMetrics] = useState<any[]>([]);
     const [dateRange, setDateRange] = useState<'today' | '7days' | 'month' | 'all' | 'custom'>('today');
     const [customStartDate, setCustomStartDate] = useState('');
     const [customEndDate, setCustomEndDate] = useState('');
+    const [selectedEmployee, setSelectedEmployee] = useState<any>(null);
 
     useEffect(() => {
         fetchMetrics();
@@ -106,7 +108,11 @@ export default function PerformanceDashboard() {
                         : 0;
 
                     return (
-                        <div key={m.id} className="glass border border-border/50 rounded-2xl p-6 relative overflow-hidden group shadow-lg transition-transform hover:-translate-y-1">
+                        <div
+                            key={m.id}
+                            onClick={() => setSelectedEmployee(m)}
+                            className="glass border border-border/50 rounded-2xl p-6 relative overflow-hidden group shadow-lg transition-transform hover:-translate-y-1 cursor-pointer"
+                        >
                             <div className="flex justify-between items-start mb-6">
                                 <div>
                                     <h3 className="font-bold text-xl text-foreground group-hover:text-primary transition-colors">{m.name}</h3>
@@ -154,11 +160,7 @@ export default function PerformanceDashboard() {
                                         <span className="font-black text-xl text-accent">{m.extra_completed || 0}</span>
                                     </div>
 
-                                    <div className="grid grid-cols-2 gap-2 mt-4">
-                                        <div className="bg-muted/30 rounded-xl p-3 border border-border/40 text-center">
-                                            <div className="text-xs font-bold text-muted-foreground uppercase tracking-wider mb-1">Avg Time</div>
-                                            <div className="font-black text-foreground">{m.avg_completion_hours ? `${m.avg_completion_hours}h` : '--'}</div>
-                                        </div>
+                                    <div className="mt-4">
                                         <div className="bg-muted/30 rounded-xl p-3 border border-border/40 text-center">
                                             <div className="text-xs font-bold text-muted-foreground uppercase tracking-wider mb-1">Overdue</div>
                                             <div className={`font-black ${m.overdue_count > 0 ? 'text-destructive' : 'text-foreground'}`}>{m.overdue_count || 0}</div>
@@ -177,6 +179,24 @@ export default function PerformanceDashboard() {
                     </div>
                 )}
             </div>
+
+            {/* Points Info */}
+            <div className="glass p-4 rounded-xl border border-border/50 bg-primary/5 flex items-start gap-3">
+                <Info className="w-5 h-5 text-primary shrink-0 mt-0.5" />
+                <div className="text-xs text-muted-foreground">
+                    <span className="font-bold text-white block mb-1">Points System:</span>
+                    Completed Daily Tasks award <span className="text-primary font-bold">10 pts</span> each.
+                    Completed Miscellaneous (Bonus) Tasks award <span className="text-accent font-bold">25 pts</span> each.
+                    Click on an employee card to view detailed reports and performance graphs.
+                </div>
+            </div>
+
+            {selectedEmployee && (
+                <EmployeeReportModal
+                    employee={selectedEmployee}
+                    onClose={() => setSelectedEmployee(null)}
+                />
+            )}
         </div>
     );
 }

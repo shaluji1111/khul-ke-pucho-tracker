@@ -39,3 +39,21 @@ CREATE TABLE IF NOT EXISTS tasks (
 CREATE INDEX IF NOT EXISTS idx_tasks_assigned_to ON tasks(assigned_to);
 CREATE INDEX IF NOT EXISTS idx_tasks_type ON tasks(type);
 CREATE INDEX IF NOT EXISTS idx_tasks_status ON tasks(status);
+
+-- Holiday Roaster: Leaves Table
+CREATE TABLE IF NOT EXISTS leaves (
+    id TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL,
+    leave_date DATE NOT NULL,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+    UNIQUE(user_id, leave_date)
+);
+
+-- Week Configuration Table
+CREATE TABLE IF NOT EXISTS week_configs (
+    week_start_date DATE PRIMARY KEY, -- Monday of the week
+    is_accepting BOOLEAN DEFAULT 0,
+    deadline DATETIME,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);

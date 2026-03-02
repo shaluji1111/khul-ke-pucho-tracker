@@ -1,12 +1,13 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Users, CheckSquare, BarChart3, LogOut } from 'lucide-react';
+import { Users, CheckSquare, BarChart3, LogOut, Calendar } from 'lucide-react';
 import EmployeeManagement from '../components/Admin/EmployeeManagement';
 import TaskAllocation from '../components/Admin/TaskAllocation';
 import PerformanceDashboard from '../components/Admin/PerformanceDashboard';
+import HolidayRoaster from '../components/HolidayRoaster';
 
 export default function AdminDashboard() {
-    const [activeTab, setActiveTab] = useState<'employees' | 'tasks' | 'performance'>('employees');
+    const [activeTab, setActiveTab] = useState<'employees' | 'tasks' | 'performance' | 'roaster'>('employees');
     const navigate = useNavigate();
 
     const handleLogout = () => {
@@ -64,6 +65,17 @@ export default function AdminDashboard() {
                         <BarChart3 className="w-5 h-5" />
                         Performance
                     </button>
+
+                    <button
+                        onClick={() => setActiveTab('roaster')}
+                        className={`flex items-center gap-3 w-full px-4 py-3.5 rounded-xl font-bold transition-all ${activeTab === 'roaster'
+                            ? 'bg-primary/10 text-primary scale-105 shadow-sm border border-primary/20'
+                            : 'text-muted-foreground hover:bg-muted/50 hover:text-foreground'
+                            }`}
+                    >
+                        <Calendar className="w-5 h-5" />
+                        Roaster
+                    </button>
                 </nav>
 
                 <div className="p-6 border-t border-border/50">
@@ -83,6 +95,7 @@ export default function AdminDashboard() {
                     {activeTab === 'employees' && <EmployeeManagement />}
                     {activeTab === 'tasks' && <TaskAllocation />}
                     {activeTab === 'performance' && <PerformanceDashboard />}
+                    {activeTab === 'roaster' && <HolidayRoaster isAdmin={true} />}
                 </div>
                 {/* Decorative flair */}
                 <div className="absolute top-0 right-0 w-[500px] h-[500px] bg-accent/5 rounded-full blur-[100px] pointer-events-none" />
@@ -101,6 +114,10 @@ export default function AdminDashboard() {
                 <button onClick={() => setActiveTab('performance')} className={`p-2 rounded-xl flex flex-col items-center gap-1 flex-1 ${activeTab === 'performance' ? 'text-primary' : 'text-muted-foreground'}`}>
                     <BarChart3 className="w-6 h-6" />
                     <span className="text-[10px] font-bold">Stats</span>
+                </button>
+                <button onClick={() => setActiveTab('roaster')} className={`p-2 rounded-xl flex flex-col items-center gap-1 flex-1 ${activeTab === 'roaster' ? 'text-primary' : 'text-muted-foreground'}`}>
+                    <Calendar className="w-6 h-6" />
+                    <span className="text-[10px] font-bold">Roaster</span>
                 </button>
             </nav>
         </div>

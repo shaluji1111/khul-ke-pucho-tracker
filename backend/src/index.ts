@@ -4,6 +4,7 @@ import dotenv from 'dotenv';
 import authRoutes from './routes/auth';
 import usersRoutes from './routes/users';
 import tasksRoutes from './routes/tasks';
+import leavesRoutes from './routes/leaves';
 
 dotenv.config();
 
@@ -24,6 +25,7 @@ app.get('/api/health', (req, res) => {
 app.use('/api/auth', authRoutes);
 app.use('/api/users', usersRoutes);
 app.use('/api/tasks', tasksRoutes);
+app.use('/api/leaves', leavesRoutes);
 
 if (process.env.NODE_ENV !== 'production') {
     app.listen(PORT, () => {

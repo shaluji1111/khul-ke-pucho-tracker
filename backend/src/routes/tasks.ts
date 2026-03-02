@@ -317,4 +317,70 @@ router.get('/metrics', requireAdmin, async (req: AuthRequest, res: Response): Pr
     }
 });
 
+// Detailed employee report
+router.get('/employee-report/:userId', requireAdmin, async (req: AuthRequest, res: Response): Promise<void> => {
+    try {
+        const { userId } = req.params;
+        const startDate = req.query.startDate as string;
+        const endDate = req.query.endDate as string;
+
+        let dateCondition = "DATE(t.created_at, 'localtime') >= DATE('now', '-30 days')";
+        let args: any[] = [userId];
+
+        if (startDate && endDate) {
+            dateCondition = "DATE(t.created_at, 'localtime') >= DATE(?) AND DATE(t.created_at, 'localtime') <= DATE(?)";
+            args = [userId, startDate, endDate];
+        }
+
+        // 1. Daily points trend
+        const pointsTrendQuery = `
+            SELECT
+                DATE(t.created_at, 'localtime') as date,
+                SUM(CASE WHEN t.type = 'daily' AND t.status = 'completed' THEN 10 ELSE 0 END) +
+                SUM(CASE WHEN t.type = 'miscellaneous' AND t.status = 'completed' THEN 25 ELSE 0 END) as points
+            FROM tasks t
+            WHERE t.assigned_to = ? AND ${dateCondition}
+            GROUP BY date
+            ORDER BY date ASC
+        `;
+
+        // 2. Task types breakdown
+        const typeBreakdownQuery = `
+            SELECT
+                type,
+                COUNT(*) as count,
+                SUM(CASE WHEN status = 'completed' THEN 1 ELSE 0 END) as completed
+            FROM tasks
+            WHERE assigned_to = ? AND ${dateCondition}
+            GROUP BY type
+        `;
+
+        // 3. Completion vs Deadlines
+        const deadlineQuery = `
+            SELECT
+                COUNT(*) as total,
+                SUM(CASE WHEN status = 'completed' AND deadline IS NOT NULL AND completed_at <= deadline THEN 1 ELSE 0 END) as on_time,
+                SUM(CASE WHEN status = 'completed' AND deadline IS NOT NULL AND completed_at > deadline THEN 1 ELSE 0 END) as late,
+                SUM(CASE WHEN status = 'pending' AND deadline IS NOT NULL AND DATE('now') > DATE(deadline) THEN 1 ELSE 0 END) as overdue_pending
+            FROM tasks
+            WHERE assigned_to = ? AND ${dateCondition}
+        `;
+
+        const [trend, types, deadLines] = await Promise.all([
+            db.execute({ sql: pointsTrendQuery, args }),
+            db.execute({ sql: typeBreakdownQuery, args }),
+            db.execute({ sql: deadlineQuery, args })
+        ]);
+
+        res.json({
+            trend: trend.rows,
+            types: types.rows,
+            deadLines: deadLines.rows[0]
+        });
+    } catch (error) {
+        console.error(error);
+        res.status(500).json({ error: 'Failed to fetch employee report' });
+    }
+});
+
 export default router;
