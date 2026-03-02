@@ -1,0 +1,48 @@
+﻿diff --git a/backend/src/routes/auth.ts b/backend/src/routes/auth.ts
+index 08d12b4..e4324c0 100644
+--- a/backend/src/routes/auth.ts
++++ b/backend/src/routes/auth.ts
+@@ -1,17 +1,32 @@
+ import { Router, Request, Response } from 'express';
+ import bcrypt from 'bcryptjs';
+ import jwt from 'jsonwebtoken';
++import { randomUUID } from 'crypto';
+ import { db } from '../db/client';
+ 
+ const router = Router();
+-const JWT_SECRET = process.env.JWT_SECRET || 'supersecret';
++const JWT_SECRET = process.env.JWT_SECRET;
++if (!JWT_SECRET && process.env.NODE_ENV === 'production') {
++    throw new Error('JWT_SECRET must be set in production');
++}
++const SECRET = JWT_SECRET || 'supersecret';
+ 
+ // Helper to generate IDs
+-const generateId = () => Math.random().toString(36).substring(2, 11);
++const generateId = () => randomUUID();
+ 
+ router.post('/login', async (req: Request, res: Response): Promise<void> => {
+     const { name, password } = req.body;
+ 
++    if (!name || typeof name !== 'string' || name.length > 50) {
++        res.status(400).json({ error: 'Invalid name' });
++        return;
++    }
++
++    if (!password || typeof password !== 'string' || password.length > 100) {
++        res.status(400).json({ error: 'Invalid password' });
++        return;
++    }
++
+     try {
+         const result = await db.execute({
+             sql: 'SELECT * FROM users WHERE name = ?',
+@@ -34,7 +49,7 @@ router.post('/login', async (req: Request, res: Response): Promise<void> => {
+ 
+         const token = jwt.sign(
+             { id: user.id, role: user.role },
+-            JWT_SECRET,
++            SECRET,
+             { expiresIn: '24h' }
+         );
+ 

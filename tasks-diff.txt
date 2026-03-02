@@ -1,0 +1,88 @@
+﻿diff --git a/backend/src/routes/tasks.ts b/backend/src/routes/tasks.ts
+index d2f9ab7..30de3ff 100644
+--- a/backend/src/routes/tasks.ts
++++ b/backend/src/routes/tasks.ts
+@@ -1,9 +1,10 @@
+ import { Router, Request, Response } from 'express';
++import { randomUUID } from 'crypto';
+ import { db } from '../db/client';
+ import { authenticateToken, requireAdmin, AuthRequest } from '../middleware/auth';
+ 
+ const router = Router();
+-const generateId = () => Math.random().toString(36).substring(2, 11);
++const generateId = () => randomUUID();
+ 
+ // All task routes require authentication
+ router.use(authenticateToken);
+@@ -12,6 +13,16 @@ router.use(authenticateToken);
+ router.post('/', async (req: AuthRequest, res: Response): Promise<void> => {
+     const { title, description, type, assigned_to, deadline } = req.body;
+ 
++    if (!title || typeof title !== 'string' || title.length > 200) {
++        res.status(400).json({ error: 'Title is required and must be under 200 characters' });
++        return;
++    }
++
++    if (description && (typeof description !== 'string' || description.length > 2000)) {
++        res.status(400).json({ error: 'Description must be under 2000 characters' });
++        return;
++    }
++
+     // Employee logic: can only self-assign 'miscellaneous' tasks
+     if (req.user?.role !== 'admin') {
+         if (!title) {
+@@ -46,6 +57,7 @@ router.post('/', async (req: AuthRequest, res: Response): Promise<void> => {
+ 
+         res.status(201).json({ id, title, type, assigned_to, status: 'pending', deadline, created_by: req.user?.id });
+     } catch (error) {
++        console.error('Error creating task:', error);
+         res.status(500).json({ error: 'Failed to create task' });
+     }
+ });
+@@ -53,8 +65,16 @@ router.post('/', async (req: AuthRequest, res: Response): Promise<void> => {
+ // Create Recurring Task
+ router.post('/recurring', requireAdmin, async (req: AuthRequest, res: Response): Promise<void> => {
+     const { title, description, assigned_to } = req.body;
+-    if (!title || !assigned_to) {
+-        res.status(400).json({ error: 'Title and assigned_to are required' });
++    if (!title || typeof title !== 'string' || title.length > 200) {
++        res.status(400).json({ error: 'Title is required and must be under 200 characters' });
++        return;
++    }
++    if (!assigned_to || typeof assigned_to !== 'string') {
++        res.status(400).json({ error: 'assigned_to is required' });
++        return;
++    }
++    if (description && (typeof description !== 'string' || description.length > 2000)) {
++        res.status(400).json({ error: 'Description must be under 2000 characters' });
+         return;
+     }
+     try {
+@@ -249,8 +269,11 @@ router.get('/metrics', requireAdmin, async (req: AuthRequest, res: Response): Pr
+         const endDate = req.query.endDate as string;
+ 
+         let dateCondition = "DATE(t.created_at, 'localtime') = DATE('now', 'localtime')";
++        let args: any[] = [];
++
+         if (startDate && endDate) {
+-            dateCondition = `DATE(t.created_at, 'localtime') >= DATE('${startDate}') AND DATE(t.created_at, 'localtime') <= DATE('${endDate}')`;
++            dateCondition = "DATE(t.created_at, 'localtime') >= DATE(?) AND DATE(t.created_at, 'localtime') <= DATE(?)";
++            args = [startDate, endDate];
+         }
+ 
+         const query = `
+@@ -269,7 +292,13 @@ router.get('/metrics', requireAdmin, async (req: AuthRequest, res: Response): Pr
+       GROUP BY u.id, u.name
+     `;
+ 
+-        const result = await db.execute(query);
++        // We repeat the arguments because dateCondition is used 5 times in the query
++        const finalArgs = [...args, ...args, ...args, ...args, ...args];
++
++        const result = await db.execute({
++            sql: query,
++            args: finalArgs
++        });
+ 
+         const metricsWithPoints = result.rows.map((row: any) => ({
+             ...row,
