@@ -2,10 +2,21 @@
 CREATE TABLE IF NOT EXISTS users (
     id TEXT PRIMARY KEY,
     name TEXT NOT NULL,
+    full_name TEXT,
     role TEXT NOT NULL CHECK (role IN ('admin', 'employee')),
     designation TEXT,
     password_hash TEXT NOT NULL,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Recurring Tasks Definition Table (Daily Tasks)
+CREATE TABLE IF NOT EXISTS recurring_tasks (
+    id TEXT PRIMARY KEY,
+    title TEXT NOT NULL,
+    description TEXT,
+    assigned_to TEXT NOT NULL,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (assigned_to) REFERENCES users(id) ON DELETE CASCADE
 );
 
 -- Tasks Table
@@ -16,6 +27,7 @@ CREATE TABLE IF NOT EXISTS tasks (
     type TEXT NOT NULL CHECK (type IN ('daily', 'miscellaneous')),
     assigned_to TEXT NOT NULL,
     status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'in_progress', 'completed')),
+    deadline DATETIME,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     completed_at DATETIME,
     FOREIGN KEY (assigned_to) REFERENCES users(id) ON DELETE CASCADE

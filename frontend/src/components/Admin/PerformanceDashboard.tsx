@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Target, Trophy, Flame } from 'lucide-react';
+import { Target, Trophy, Flame, RefreshCw } from 'lucide-react';
 import api from '../../api/client';
 
 export default function PerformanceDashboard() {
@@ -7,6 +7,10 @@ export default function PerformanceDashboard() {
 
     useEffect(() => {
         fetchMetrics();
+        const interval = setInterval(() => {
+            fetchMetrics();
+        }, 5000);
+        return () => clearInterval(interval);
     }, []);
 
     const fetchMetrics = async () => {
@@ -22,7 +26,12 @@ export default function PerformanceDashboard() {
         <div className="space-y-8 animate-slide-up">
             <div className="flex items-center justify-between">
                 <div>
-                    <h2 className="text-3xl font-extrabold text-white">Performance Overview</h2>
+                    <h2 className="text-3xl font-extrabold text-white flex items-center gap-3">
+                        Performance Overview
+                        <button onClick={fetchMetrics} className="p-2 bg-primary/20 text-primary hover:bg-primary/30 rounded-xl transition-colors" title="Refresh Metrics">
+                            <RefreshCw className="w-5 h-5" />
+                        </button>
+                    </h2>
                     <p className="text-muted-foreground mt-1 text-sm font-medium">Track team productivity and bonus achievements.</p>
                 </div>
             </div>

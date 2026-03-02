@@ -8,9 +8,30 @@ const generateId = () => Math.random().toString(36).substring(2, 11);
 // All task routes require authentication
 router.use(authenticateToken);
 
-// Create a new task (Admin only)
-router.post('/', requireAdmin, async (req: AuthRequest, res: Response): Promise<void> => {
-    const { title, description, type, assigned_to } = req.body;
+// Create a new task (Admin sets assignment, Employee self-assigns)
+router.post('/', async (req: AuthRequest, res: Response): Promise<void> => {
+    const { title, description, type, assigned_to, deadline } = req.body;
+
+    // Employee logic: can only self-assign 'miscellaneous' tasks
+    if (req.user?.role !== 'admin') {
+        if (!title) {
+            res.status(400).json({ error: 'Title is required' });
+            return;
+        }
+        try {
+            const id = generateId();
+            await db.execute({
+                sql: 'INSERT INTO tasks (id, title, description, type, assigned_to, deadline, created_by) VALUES (?, ?, ?, ?, ?, ?, ?)',
+                args: [id, title as string, description ? (description as string) : null, 'miscellaneous', req.user?.id as string, deadline ? (deadline as string) : null, req.user?.id as string]
+            });
+            res.status(201).json({ id, title, type: 'miscellaneous', assigned_to: req.user?.id, status: 'pending', deadline, created_by: req.user?.id });
+        } catch (error) {
+            res.status(500).json({ error: 'Failed to create self-assigned task' });
+        }
+        return;
+    }
+
+    // Admin logic
     if (!title || !type || !assigned_to) {
         res.status(400).json({ error: 'Title, type, and assigned_to are required' });
         return;
@@ -19,13 +40,57 @@ router.post('/', requireAdmin, async (req: AuthRequest, res: Response): Promise<
     try {
         const id = generateId();
         await db.execute({
-            sql: 'INSERT INTO tasks (id, title, description, type, assigned_to) VALUES (?, ?, ?, ?, ?)',
-            args: [id, title as string, description ? (description as string) : null, type as string, assigned_to as string]
+            sql: 'INSERT INTO tasks (id, title, description, type, assigned_to, deadline, created_by) VALUES (?, ?, ?, ?, ?, ?, ?)',
+            args: [id, title as string, description ? (description as string) : null, type as string, assigned_to as string, deadline ? (deadline as string) : null, req.user?.id as string]
         });
 
-        res.status(201).json({ id, title, type, assigned_to, status: 'pending' });
+        res.status(201).json({ id, title, type, assigned_to, status: 'pending', deadline, created_by: req.user?.id });
     } catch (error) {
         res.status(500).json({ error: 'Failed to create task' });
+    }
+});
+
+// Create Recurring Task
+router.post('/recurring', requireAdmin, async (req: AuthRequest, res: Response): Promise<void> => {
+    const { title, description, assigned_to } = req.body;
+    if (!title || !assigned_to) {
+        res.status(400).json({ error: 'Title and assigned_to are required' });
+        return;
+    }
+    try {
+        const id = generateId();
+        await db.execute({
+            sql: 'INSERT INTO recurring_tasks (id, title, description, assigned_to) VALUES (?, ?, ?, ?)',
+            args: [id, title as string, description ? (description as string) : null, assigned_to as string]
+        });
+        res.status(201).json({ id, title, description, assigned_to });
+    } catch (error) {
+        res.status(500).json({ error: 'Failed to create recurring task' });
+    }
+});
+
+// Get Recurring Tasks
+router.get('/recurring', requireAdmin, async (req: AuthRequest, res: Response): Promise<void> => {
+    try {
+        const result = await db.execute(`
+            SELECT rt.*, u.name as assignee_name 
+            FROM recurring_tasks rt 
+            JOIN users u ON rt.assigned_to = u.id 
+            ORDER BY rt.created_at DESC
+        `);
+        res.json(result.rows);
+    } catch (error) {
+        res.status(500).json({ error: 'Failed to fetch recurring tasks' });
+    }
+});
+
+// Delete Recurring Task
+router.delete('/recurring/:id', requireAdmin, async (req: AuthRequest, res: Response): Promise<void> => {
+    try {
+        await db.execute({ sql: 'DELETE FROM recurring_tasks WHERE id = ?', args: [req.params.id as string] });
+        res.json({ message: 'Recurring task deleted' });
+    } catch (error) {
+        res.status(500).json({ error: 'Failed to delete recurring task' });
     }
 });
 
@@ -47,7 +112,7 @@ router.patch('/:id/status', async (req: AuthRequest, res: Response): Promise<voi
             ? 'SELECT id FROM tasks WHERE id = ?'
             : 'SELECT id FROM tasks WHERE id = ? AND assigned_to = ?';
 
-        const args = req.user?.role === 'admin' ? [id as string] : [id as string, req.user?.id as string];
+        const args: any[] = req.user?.role === 'admin' ? [id as string] : [id as string, req.user?.id as string];
 
         const taskCheck = await db.execute({ sql: verifySql, args });
 
@@ -67,9 +132,96 @@ router.patch('/:id/status', async (req: AuthRequest, res: Response): Promise<voi
     }
 });
 
+// Update a specific task (Employees can only update tasks they created)
+router.put('/:id', async (req: AuthRequest, res: Response): Promise<void> => {
+    const { id } = req.params;
+    const { title } = req.body;
+
+    if (!title) {
+        res.status(400).json({ error: 'Title is required' });
+        return;
+    }
+
+    try {
+        // Only allow edits if user is admin, OR if user is employee AND created the task
+        const verifySql = req.user?.role === 'admin'
+            ? 'SELECT id FROM tasks WHERE id = ?'
+            : 'SELECT id FROM tasks WHERE id = ? AND created_by = ?';
+
+        const args: any[] = req.user?.role === 'admin' ? [id as string] : [id as string, req.user?.id as string];
+
+        const taskCheck = await db.execute({ sql: verifySql, args });
+
+        if (taskCheck.rows.length === 0) {
+            res.status(403).json({ error: 'Unauthorized to edit this task' });
+            return;
+        }
+
+        await db.execute({
+            sql: 'UPDATE tasks SET title = ? WHERE id = ?',
+            args: [title as string, id as string]
+        });
+
+        res.json({ message: 'Task updated successfully' });
+    } catch (error) {
+        res.status(500).json({ error: 'Failed to update task' });
+    }
+});
+
+// Delete a specific task (Employees can only delete tasks they created)
+router.delete('/:id', async (req: AuthRequest, res: Response): Promise<void> => {
+    const { id } = req.params;
+
+    try {
+        const verifySql = req.user?.role === 'admin'
+            ? 'SELECT id FROM tasks WHERE id = ?'
+            : 'SELECT id FROM tasks WHERE id = ? AND created_by = ?';
+
+        const args: any[] = req.user?.role === 'admin' ? [id as string] : [id as string, req.user?.id as string];
+
+        const taskCheck = await db.execute({ sql: verifySql, args });
+
+        if (taskCheck.rows.length === 0) {
+            res.status(403).json({ error: 'Unauthorized to delete this task' });
+            return;
+        }
+
+        await db.execute({
+            sql: 'DELETE FROM tasks WHERE id = ?',
+            args: [id as string]
+        });
+
+        res.json({ message: 'Task deleted successfully' });
+    } catch (error) {
+        res.status(500).json({ error: 'Failed to delete task' });
+    }
+});
+
 // Get tasks (Admin sees all, Employee sees only theirs)
 router.get('/', async (req: AuthRequest, res: Response): Promise<void> => {
     try {
+        if (req.user?.role !== 'admin') {
+            // Auto-generate daily tasks for employees if they don't exist for today
+            const checkDaily = await db.execute({
+                sql: "SELECT COUNT(*) as count FROM tasks WHERE assigned_to = ? AND type = 'daily' AND DATE(created_at, 'localtime') = DATE('now', 'localtime')",
+                args: [req.user?.id!]
+            });
+
+            if (Number(checkDaily.rows[0].count) === 0) {
+                const recurringResult = await db.execute({
+                    sql: 'SELECT * FROM recurring_tasks WHERE assigned_to = ?',
+                    args: [req.user?.id!]
+                });
+
+                for (const rt of recurringResult.rows) {
+                    await db.execute({
+                        sql: 'INSERT INTO tasks (id, title, description, type, assigned_to) VALUES (?, ?, ?, ?, ?)',
+                        args: [generateId(), rt.title as string, rt.description ? (rt.description as string) : null, 'daily', req.user?.id!]
+                    });
+                }
+            }
+        }
+
         let result;
         if (req.user?.role === 'admin') {
             result = await db.execute(`
@@ -97,9 +249,9 @@ router.get('/metrics', requireAdmin, async (req: AuthRequest, res: Response): Pr
       SELECT 
         u.id, 
         u.name,
-        SUM(CASE WHEN t.type = 'daily' AND t.status = 'completed' THEN 1 ELSE 0 END) as daily_completed,
-        SUM(CASE WHEN t.type = 'daily' THEN 1 ELSE 0 END) as daily_total,
-        SUM(CASE WHEN t.type = 'miscellaneous' AND t.status = 'completed' THEN 1 ELSE 0 END) as extra_completed
+        SUM(CASE WHEN t.type = 'daily' AND t.status = 'completed' AND DATE(t.created_at, 'localtime') = DATE('now', 'localtime') THEN 1 ELSE 0 END) as daily_completed,
+        SUM(CASE WHEN t.type = 'daily' AND DATE(t.created_at, 'localtime') = DATE('now', 'localtime') THEN 1 ELSE 0 END) as daily_total,
+        SUM(CASE WHEN t.type = 'miscellaneous' AND t.status = 'completed' AND DATE(t.created_at, 'localtime') = DATE('now', 'localtime') THEN 1 ELSE 0 END) as extra_completed
       FROM users u
       LEFT JOIN tasks t ON u.id = t.assigned_to
       WHERE u.role = 'employee'

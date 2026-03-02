@@ -68,7 +68,11 @@ export default function Login() {
                                         onChange={(e) => setName(e.target.value)}
                                         className="w-full bg-slate-50 border border-slate-200 focus:border-[#ec4899] focus:bg-white rounded-2xl px-5 py-4 text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-4 focus:ring-[#ec4899]/10 transition-all font-medium text-sm"
                                     />
-                                    <User size={18} className="absolute right-5 text-slate-400 group-focus-within:text-[#ec4899] transition-colors" />
+                                    {showPassword ? (
+                                        <EyeOff size={18} className="absolute right-5 text-[#ec4899] transition-colors animate-pulse" />
+                                    ) : (
+                                        <User size={18} className="absolute right-5 text-slate-400 group-focus-within:text-[#ec4899] transition-colors" />
+                                    )}
                                 </div>
 
                                 <div className="relative flex items-center group">
