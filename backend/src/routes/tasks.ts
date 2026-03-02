@@ -245,21 +245,40 @@ router.get('/', async (req: AuthRequest, res: Response): Promise<void> => {
 // Admin performance metrics
 router.get('/metrics', requireAdmin, async (req: AuthRequest, res: Response): Promise<void> => {
     try {
-        const result = await db.execute(`
+        const startDate = req.query.startDate as string;
+        const endDate = req.query.endDate as string;
+
+        let dateCondition = "DATE(t.created_at, 'localtime') = DATE('now', 'localtime')";
+        if (startDate && endDate) {
+            dateCondition = `DATE(t.created_at, 'localtime') >= DATE('${startDate}') AND DATE(t.created_at, 'localtime') <= DATE('${endDate}')`;
+        }
+
+        const query = `
       SELECT 
         u.id, 
         u.name,
-        SUM(CASE WHEN t.type = 'daily' AND t.status = 'completed' AND DATE(t.created_at, 'localtime') = DATE('now', 'localtime') THEN 1 ELSE 0 END) as daily_completed,
-        SUM(CASE WHEN t.type = 'daily' AND DATE(t.created_at, 'localtime') = DATE('now', 'localtime') THEN 1 ELSE 0 END) as daily_total,
-        SUM(CASE WHEN t.type = 'miscellaneous' AND t.status = 'completed' AND DATE(t.created_at, 'localtime') = DATE('now', 'localtime') THEN 1 ELSE 0 END) as extra_completed
+        SUM(CASE WHEN t.type = 'daily' AND t.status = 'completed' AND ${dateCondition} THEN 1 ELSE 0 END) as daily_completed,
+        SUM(CASE WHEN t.type = 'daily' AND ${dateCondition} THEN 1 ELSE 0 END) as daily_total,
+        SUM(CASE WHEN t.type = 'miscellaneous' AND t.status = 'completed' AND ${dateCondition} THEN 1 ELSE 0 END) as extra_completed,
+        ROUND(AVG(CASE WHEN t.status = 'completed' AND ${dateCondition} 
+            THEN (JULIANDAY(t.completed_at) - JULIANDAY(t.created_at)) * 24 ELSE NULL END), 1) as avg_completion_hours,
+        SUM(CASE WHEN t.status = 'completed' AND t.deadline IS NOT NULL AND t.completed_at > t.deadline AND ${dateCondition} THEN 1 ELSE 0 END) as overdue_count
       FROM users u
       LEFT JOIN tasks t ON u.id = t.assigned_to
       WHERE u.role = 'employee'
       GROUP BY u.id, u.name
-    `);
+    `;
 
-        res.json(result.rows);
+        const result = await db.execute(query);
+
+        const metricsWithPoints = result.rows.map((row: any) => ({
+            ...row,
+            total_points: (Number(row.daily_completed || 0) * 10) + (Number(row.extra_completed || 0) * 25)
+        }));
+
+        res.json(metricsWithPoints);
     } catch (error) {
+        console.error(error);
         res.status(500).json({ error: 'Failed to fetch metrics' });
     }
 });
