@@ -287,7 +287,7 @@ router.get('/metrics', requireAdmin, async (req: AuthRequest, res: Response): Pr
         const startDate = req.query.startDate as string;
         const endDate = req.query.endDate as string;
 
-        let dateCondition = "DATE(t.created_at, 'localtime') = DATE('now', 'localtime')";
+        let dateCondition = "DATE(t.created_at, 'localtime') >= DATE('now', 'localtime', '-7 days')";
         let args: any[] = [];
 
         if (startDate && endDate) {
@@ -299,6 +299,7 @@ router.get('/metrics', requireAdmin, async (req: AuthRequest, res: Response): Pr
       SELECT 
         u.id, 
         u.name,
+        u.full_name,
         SUM(CASE WHEN t.type = 'daily' AND t.status = 'completed' AND ${dateCondition} THEN 1 ELSE 0 END) as daily_completed,
         SUM(CASE WHEN t.type = 'daily' AND ${dateCondition} THEN 1 ELSE 0 END) as daily_total,
         SUM(CASE WHEN t.type = 'miscellaneous' AND t.status = 'completed' AND ${dateCondition} THEN 1 ELSE 0 END) as extra_completed,
@@ -336,8 +337,8 @@ router.get('/report/:userId', requireAdmin, async (req: AuthRequest, res: Respon
     try {
         const { userId } = req.params;
         const timeframe = (req.query.timeframe as string) || '7d';
-        const startDate = req.query.startDate as string;
-        const endDate = req.query.endDate as string;
+        const startDate = typeof req.query.startDate === 'string' ? req.query.startDate : undefined;
+        const endDate = typeof req.query.endDate === 'string' ? req.query.endDate : undefined;
 
         let dateCondition = "DATE(t.created_at, 'localtime') >= DATE('now', 'localtime', '-7 days')";
         if (timeframe === '30d') {
@@ -346,7 +347,10 @@ router.get('/report/:userId', requireAdmin, async (req: AuthRequest, res: Respon
             dateCondition = "DATE(t.created_at, 'localtime') >= DATE(?) AND DATE(t.created_at, 'localtime') <= DATE(?)";
         }
 
-        const args = startDate && endDate ? [startDate, endDate] : [];
+        const args: string[] = [];
+        if (startDate && endDate) {
+            args.push(startDate as string, endDate as string);
+        }
 
         // 1. Daily Points Trend
         const pointsTrend = await db.execute({
@@ -360,7 +364,7 @@ router.get('/report/:userId', requireAdmin, async (req: AuthRequest, res: Respon
                 GROUP BY DATE(created_at, 'localtime')
                 ORDER BY date ASC
             `,
-            args: [userId, ...args]
+            args: [userId as any, ...args]
         });
 
         // 2. Task Completion vs Deadlines
@@ -373,7 +377,7 @@ router.get('/report/:userId', requireAdmin, async (req: AuthRequest, res: Respon
                 FROM tasks t
                 WHERE assigned_to = ? AND ${dateCondition}
             `,
-            args: [userId, ...args]
+            args: [userId as any, ...args]
         });
 
         // 3. Task Type Distribution
@@ -386,7 +390,7 @@ router.get('/report/:userId', requireAdmin, async (req: AuthRequest, res: Respon
                 WHERE assigned_to = ? AND status = 'completed' AND ${dateCondition}
                 GROUP BY type
             `,
-            args: [userId, ...args]
+            args: [userId as any, ...args]
         });
 
         res.json({

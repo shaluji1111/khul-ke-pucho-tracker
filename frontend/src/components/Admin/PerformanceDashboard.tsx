@@ -5,7 +5,7 @@ import EmployeeReportModal from './EmployeeReportModal';
 
 export default function PerformanceDashboard() {
     const [metrics, setMetrics] = useState<any[]>([]);
-    const [dateRange, setDateRange] = useState<'today' | '7days' | 'month' | 'all' | 'custom'>('today');
+    const [dateRange, setDateRange] = useState<'today' | '7days' | 'month' | 'all' | 'custom'>('7days');
     const [customStartDate, setCustomStartDate] = useState('');
     const [customEndDate, setCustomEndDate] = useState('');
     const [selectedEmployee, setSelectedEmployee] = useState<any>(null);
@@ -115,7 +115,9 @@ export default function PerformanceDashboard() {
                         >
                             <div className="flex justify-between items-start mb-6">
                                 <div>
-                                    <h3 className="font-bold text-xl text-foreground group-hover:text-primary transition-colors">{m.name}</h3>
+                                    <h3 className="font-bold text-xl text-foreground group-hover:text-primary transition-colors">
+                                        {m.name} {m.full_name ? `- ${m.full_name}` : ''}
+                                    </h3>
                                     <span className="text-xs text-muted-foreground uppercase tracking-widest font-bold">Employee</span>
                                 </div>
                                 <div className="text-right">
@@ -142,7 +144,7 @@ export default function PerformanceDashboard() {
                                     </div>
                                     <div className="h-2.5 w-full bg-input/50 rounded-full overflow-hidden">
                                         <div
-                                            className="h-full bg-gradient-to-r from-primary/50 to-primary rounded-full transition-all duration-1000 ease-out"
+                                            className="h-full bg-gradient-to-r from-primary/50 to-primary rounded-full transition-[width] duration-700 ease-in-out"
                                             style={{ width: `${dailyCompletion}%` }}
                                         />
                                     </div>

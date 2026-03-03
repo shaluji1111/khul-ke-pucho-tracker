@@ -45,7 +45,7 @@ export default function EmployeeReportModal({ employee, onClose }: { employee: a
                             {employee.name.charAt(0)}
                         </div>
                         <div>
-                            <h2 className="text-2xl font-black text-foreground">{employee.name}'s Insight</h2>
+                            <h2 className="text-2xl font-black text-foreground">{employee.name} {employee.full_name ? `- ${employee.full_name}` : ''}</h2>
                             <p className="text-muted-foreground font-bold text-xs uppercase tracking-widest">{employee.designation || 'Team Member'} • Performance Analysis</p>
                         </div>
                     </div>
