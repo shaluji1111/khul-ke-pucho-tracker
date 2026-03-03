@@ -5,6 +5,7 @@ import authRoutes from './routes/auth';
 import usersRoutes from './routes/users';
 import tasksRoutes from './routes/tasks';
 import leavesRoutes from './routes/leaves';
+import { db } from './db/client';
 
 dotenv.config();
 
@@ -27,11 +28,28 @@ app.use('/api/users', usersRoutes);
 app.use('/api/tasks', tasksRoutes);
 app.use('/api/leaves', leavesRoutes);
 
-if (process.env.NODE_ENV !== 'production') {
-    app.listen(PORT, () => {
-        console.log(`Server is running on port ${PORT}`);
-    });
-}
+// Run lightweight runtime migrations for deployment ease
+const initializeDb = async () => {
+    try {
+        await db.execute('ALTER TABLE tasks ADD COLUMN points INTEGER DEFAULT 0;');
+        console.log('Added points column automatically.');
+        await db.execute("UPDATE tasks SET points = 10 WHERE type = 'daily' AND points = 0;");
+        await db.execute("UPDATE tasks SET points = 25 WHERE type = 'miscellaneous' AND (points IS NULL OR points = 0);");
+    } catch (e: any) {
+        // If it fails, the column likely already exists, which is fine
+        if (e.message && !e.message.includes('duplicate column name')) {
+            console.log('Runtime migration info:', e.message);
+        }
+    }
+};
+
+initializeDb().then(() => {
+    if (process.env.NODE_ENV !== 'production') {
+        app.listen(PORT, () => {
+            console.log(`Server is running on port ${PORT}`);
+        });
+    }
+});
 
 // Export the app for Vercel serverless function
 export default app;
