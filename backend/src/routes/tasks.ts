@@ -353,8 +353,8 @@ router.get('/metrics', requireAdmin, async (req: AuthRequest, res: Response): Pr
       GROUP BY u.id, u.name
     `;
 
-        // We repeat the arguments because dateCondition is used 5 times in the query
-        const finalArgs = [...args, ...args, ...args, ...args, ...args];
+        // We repeat the arguments because dateCondition is used 6 times in the query
+        const finalArgs = [...args, ...args, ...args, ...args, ...args, ...args];
 
         const result = await db.execute({
             sql: query,
