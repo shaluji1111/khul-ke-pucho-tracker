@@ -17,16 +17,17 @@ export default function TaskAllocation() {
     const [listTab, setListTab] = useState<'tasks' | 'templates'>('tasks');
     const [templateEmployeeFilter, setTemplateEmployeeFilter] = useState<string>('all');
 
-    // For editing templates
     const [editingTemplate, setEditingTemplate] = useState<any>(null);
     const [editTemplateTitle, setEditTemplateTitle] = useState('');
     const [editTemplateDesc, setEditTemplateDesc] = useState('');
+    const [editTemplateAssignee, setEditTemplateAssignee] = useState('');
 
     // For editing active tasks
     const [editingTask, setEditingTask] = useState<any>(null);
     const [editTaskTitle, setEditTaskTitle] = useState('');
     const [editTaskDesc, setEditTaskDesc] = useState('');
     const [editTaskDeadline, setEditTaskDeadline] = useState('');
+    const [editTaskAssignee, setEditTaskAssignee] = useState('');
 
     useEffect(() => {
         fetchData();
@@ -90,14 +91,16 @@ export default function TaskAllocation() {
         setEditingTemplate(template);
         setEditTemplateTitle(template.title);
         setEditTemplateDesc(template.description || '');
+        setEditTemplateAssignee(template.assigned_to);
     };
 
     const handleEditTemplate = async (id: string) => {
-        if (!editTemplateTitle.trim()) return;
+        if (!editTemplateTitle.trim() || !editTemplateAssignee) return;
         try {
             await api.put(`/tasks/recurring/${id}`, {
                 title: editTemplateTitle,
-                description: editTemplateDesc
+                description: editTemplateDesc,
+                assigned_to: editTemplateAssignee
             });
             setEditingTemplate(null);
             fetchData();
@@ -111,17 +114,29 @@ export default function TaskAllocation() {
         setEditTaskTitle(task.title);
         setEditTaskDesc(task.description || '');
         setEditTaskDeadline(task.deadline ? new Date(task.deadline).toISOString().slice(0, 16) : '');
+        setEditTaskAssignee(task.assigned_to);
     };
 
     const handleEditTask = async (id: string) => {
-        if (!editTaskTitle.trim()) return;
+        if (!editTaskTitle.trim() || !editTaskAssignee) return;
         try {
             await api.put(`/tasks/${id}`, {
                 title: editTaskTitle,
                 description: editTaskDesc,
-                deadline: editTaskDeadline || null
+                deadline: editTaskDeadline || null,
+                assigned_to: editTaskAssignee
             });
             setEditingTask(null);
+            fetchData();
+        } catch (e) {
+            console.error(e);
+        }
+    };
+
+    const handleDeleteTask = async (id: string) => {
+        if (!window.confirm('Delete this task?')) return;
+        try {
+            await api.delete(`/tasks/${id}`);
             fetchData();
         } catch (e) {
             console.error(e);
@@ -251,6 +266,15 @@ export default function TaskAllocation() {
                                                     placeholder="Task Title"
                                                     autoFocus
                                                 />
+                                                <select
+                                                    className="w-full bg-input/50 border border-border/60 rounded-lg px-3 py-2 text-sm text-foreground focus:ring-2 focus:ring-primary/50 transition-all font-medium appearance-none"
+                                                    value={editTaskAssignee}
+                                                    onChange={e => setEditTaskAssignee(e.target.value)}
+                                                >
+                                                    {users.map(u => (
+                                                        <option key={u.id} value={u.id}>{u.full_name ? `${u.full_name} (${u.name})` : u.name}</option>
+                                                    ))}
+                                                </select>
                                                 {t.type === 'miscellaneous' && (
                                                     <input
                                                         type="datetime-local"
@@ -291,6 +315,13 @@ export default function TaskAllocation() {
                                                             title="Edit Task"
                                                         >
                                                             <Pencil className="w-4 h-4" />
+                                                        </button>
+                                                        <button
+                                                            onClick={() => handleDeleteTask(t.id)}
+                                                            className="p-1.5 text-muted-foreground hover:bg-destructive/10 hover:text-destructive rounded-lg transition-colors"
+                                                            title="Delete Task"
+                                                        >
+                                                            <Trash2 className="w-4 h-4" />
                                                         </button>
                                                         {t.status === 'completed' ? (
                                                             <span className="flex items-center gap-1.5 text-sm font-bold text-emerald-400 bg-emerald-400/10 px-3 py-1.5 rounded-lg border border-emerald-400/20">
@@ -348,6 +379,15 @@ export default function TaskAllocation() {
                                                     placeholder="Task Title"
                                                     autoFocus
                                                 />
+                                                <select
+                                                    className="w-full bg-input/50 border border-border/60 rounded-lg px-3 py-2 text-sm text-foreground focus:ring-2 focus:ring-accent/50 transition-all font-medium appearance-none"
+                                                    value={editTemplateAssignee}
+                                                    onChange={e => setEditTemplateAssignee(e.target.value)}
+                                                >
+                                                    {users.map(u => (
+                                                        <option key={u.id} value={u.id}>{u.full_name ? `${u.full_name} (${u.name})` : u.name}</option>
+                                                    ))}
+                                                </select>
                                                 <div className="flex gap-2 justify-end">
                                                     <button onClick={() => setEditingTemplate(null)} className="px-3 py-1.5 text-xs font-bold text-muted-foreground hover:bg-white/5 rounded-lg transition-colors">Cancel</button>
                                                     <button onClick={() => handleEditTemplate(rt.id)} className="px-3 py-1.5 text-xs font-bold bg-accent text-white hover:bg-accent/90 rounded-lg transition-colors shadow-sm">Save</button>
