@@ -1,0 +1,95 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 230 45% 8%;
+    /* Deep navy/blue background */
+    --foreground: 210 40% 98%;
+    --muted: 230 45% 15%;
+    --muted-foreground: 215.4 16.3% 65%;
+    --accent: 199 89% 48%;
+    /* Vibrant Blue core accent */
+    --accent-foreground: 210 40% 98%;
+    --popover: 230 45% 8%;
+    --popover-foreground: 215 20.2% 65.1%;
+    --border: 230 45% 20%;
+    --input: 230 45% 20%;
+    --card: 230 45% 10%;
+    --card-foreground: 213 31% 91%;
+    --primary: 330 81% 60%;
+    /* Vibrant Pink primary */
+    --primary-foreground: 330 20% 98%;
+    --secondary: 199 89% 48%;
+    /* Blue secondary */
+    --secondary-foreground: 210 40% 98%;
+    --destructive: 0 63% 31%;
+    --destructive-foreground: 210 40% 98%;
+    --ring: 330 81% 60%;
+    /* Pink focus ring */
+    --radius: 0.75rem;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+    cursor: url("/banana-cursor.png") 16 16, auto !important;
+  }
+
+  /* Ensure interactive elements keep the banana */
+  a,
+  button,
+  [role="button"],
+  input,
+  select,
+  textarea {
+    cursor: url("/banana-cursor.png") 16 16, pointer !important;
+  }
+
+  .no-banana,
+  .no-banana * {
+    cursor: auto !important;
+  }
+
+  .no-banana a,
+  .no-banana button,
+  .no-banana [role="button"] {
+    cursor: pointer !important;
+  }
+
+  .no-banana input[type="text"],
+  .no-banana input[type="password"],
+  .no-banana textarea {
+    cursor: text !important;
+  }
+
+  body {
+    @apply bg-background text-foreground antialiased selection:bg-primary selection:text-primary-foreground;
+    font-feature-settings: "rlig" 1, "calt" 1;
+  }
+
+  /* Custom scrollbar for modern look */
+  ::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    @apply bg-accent rounded-full;
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    @apply bg-primary;
+  }
+}
+
+/* Glassmorphism utility */
+.glass {
+  @apply bg-background/60 backdrop-blur-xl border border-border shadow-xl;
+}
