@@ -144,11 +144,12 @@ export default function HolidayRoaster({ isAdmin = false }: { isAdmin?: boolean 
                                             <div>
                                                 <p className="text-sm font-black">{offset === 0 ? 'This Week' : offset === 1 ? 'Next Week' : `Week of ${monday.toLocaleDateString()}`}</p>
                                                 <p className="text-[10px] text-muted-foreground font-bold uppercase">{mondayStr}</p>
+                                                {offset === 1 && <p className="text-[9px] text-amber-500 font-bold uppercase mt-0.5">Locks this Friday</p>}
                                             </div>
                                             <button
                                                 onClick={() => toggleWeek(mondayStr, isOpen)}
-                                                className={`p-2 rounded-xl transition-all ${isOpen ? 'bg-emerald-500/10 text-emerald-500' : 'bg-amber-500/10 text-amber-500 hover:bg-amber-500/20'}`}
-                                                title={isOpen ? 'Week Open (Override Active)' : 'Week Closed (Standard Rules)'}
+                                                className={`p-2 rounded-xl transition-all ${isOpen ? 'bg-emerald-500/10 text-emerald-500' : 'bg-muted/50 text-muted-foreground hover:text-amber-500 hover:bg-amber-500/10'}`}
+                                                title={isOpen ? 'Unlocked (Admin Override)' : 'Locked (Standard Rules)'}
                                             >
                                                 {isOpen ? <Unlock className="w-5 h-5" /> : <Lock className="w-5 h-5" />}
                                             </button>

@@ -220,49 +220,63 @@ router.delete('/:id', async (req: AuthRequest, res: Response): Promise<void> => 
 // Get tasks (Admin sees all, Employee sees only theirs)
 router.get('/', async (req: AuthRequest, res: Response): Promise<void> => {
     try {
+        const dateParam = req.query.date as string; // Expects YYYY-MM-DD
+        const targetDateSql = dateParam ? "DATE(?)" : "DATE('now', 'localtime')";
+        const targetDateArgs = dateParam ? [dateParam] : [];
+
         if (req.user?.role !== 'admin') {
-            // Fetch all recurring task templates assigned to the user
-            const recurringResult = await db.execute({
-                sql: 'SELECT * FROM recurring_tasks WHERE assigned_to = ?',
-                args: [req.user?.id!]
-            });
+            // Only auto-generate recurring tasks for TODAY to avoid logic complexity
+            const isToday = !dateParam || dateParam === new Date().toISOString().split('T')[0];
 
-            // Fetch the daily tasks that have already been generated today for the user
-            const todaysTasksResult = await db.execute({
-                sql: "SELECT title FROM tasks WHERE assigned_to = ? AND type = 'daily' AND DATE(created_at, 'localtime') = DATE('now', 'localtime')",
-                args: [req.user?.id!]
-            });
+            if (isToday) {
+                // Fetch all recurring task templates assigned to the user
+                const recurringResult = await db.execute({
+                    sql: 'SELECT * FROM recurring_tasks WHERE assigned_to = ?',
+                    args: [req.user?.id!]
+                });
 
-            // Create a set of existing daily task titles for quick lookup
-            const existingTitles = new Set(todaysTasksResult.rows.map(r => r.title as string));
+                // Fetch the daily tasks that have already been generated today for the user
+                const todaysTasksResult = await db.execute({
+                    sql: "SELECT title FROM tasks WHERE assigned_to = ? AND type = 'daily' AND DATE(created_at, 'localtime') = DATE('now', 'localtime')",
+                    args: [req.user?.id!]
+                });
 
-            // Generate a new task for any recurring template that hasn't been instantiated today
-            for (const rt of recurringResult.rows) {
-                if (!existingTitles.has(rt.title as string)) {
-                    await db.execute({
-                        sql: 'INSERT INTO tasks (id, title, description, type, assigned_to) VALUES (?, ?, ?, ?, ?)',
-                        args: [generateId(), rt.title as string, rt.description ? (rt.description as string) : null, 'daily', req.user?.id!]
-                    });
+                // Create a set of existing daily task titles for quick lookup
+                const existingTitles = new Set(todaysTasksResult.rows.map(r => r.title as string));
+
+                // Generate a new task for any recurring template that hasn't been instantiated today
+                for (const rt of recurringResult.rows) {
+                    if (!existingTitles.has(rt.title as string)) {
+                        await db.execute({
+                            sql: 'INSERT INTO tasks (id, title, description, type, assigned_to) VALUES (?, ?, ?, ?, ?)',
+                            args: [generateId(), rt.title as string, rt.description ? (rt.description as string) : null, 'daily', req.user?.id!]
+                        });
+                    }
                 }
             }
         }
 
         let result;
         if (req.user?.role === 'admin') {
-            result = await db.execute(`
-        SELECT t.*, u.name as assignee_name 
-        FROM tasks t 
-        JOIN users u ON t.assigned_to = u.id 
-        ORDER BY t.created_at DESC
-      `);
+            result = await db.execute({
+                sql: `
+                    SELECT t.*, u.name as assignee_name 
+                    FROM tasks t 
+                    JOIN users u ON t.assigned_to = u.id 
+                    WHERE ${targetDateSql === "DATE(?)" ? `DATE(t.created_at, 'localtime') = ${targetDateSql}` : `DATE(t.created_at, 'localtime') = ${targetDateSql}`}
+                    ORDER BY t.created_at DESC
+                `,
+                args: targetDateArgs
+            });
         } else {
             result = await db.execute({
-                sql: 'SELECT * FROM tasks WHERE assigned_to = ? ORDER BY created_at DESC',
-                args: [req.user?.id!]
+                sql: `SELECT * FROM tasks WHERE assigned_to = ? AND DATE(created_at, 'localtime') = ${targetDateSql} ORDER BY created_at DESC`,
+                args: [req.user?.id!, ...targetDateArgs]
             });
         }
         res.json(result.rows);
     } catch (error) {
+        console.error('Error fetching tasks:', error);
         res.status(500).json({ error: 'Failed to fetch tasks' });
     }
 });

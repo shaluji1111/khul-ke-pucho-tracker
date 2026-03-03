@@ -39,47 +39,65 @@ router.post('/', async (req: AuthRequest, res: Response) => {
     }
 
     try {
-        // Business Rule: 3-day lead time
-        const today = new Date();
-        today.setHours(0, 0, 0, 0);
-        const startDateObj = new Date(start_date);
-        
-        const diffTime = startDateObj.getTime() - today.getTime();
-        const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+        try {
+            const startDateObj = new Date(start_date);
+            const requestedMonday = new Date(startDateObj);
+            const day = requestedMonday.getDay();
+            const diff = requestedMonday.getDate() - day + (day === 0 ? -6 : 1);
+            requestedMonday.setDate(diff);
+            const mondayStr = requestedMonday.toISOString().split('T')[0];
 
-        // Check if week is explicitly opened by Admin
-        // Find the Monday of the requested week
-        const requestedMonday = new Date(startDateObj);
-        const day = requestedMonday.getDay();
-        const diff = requestedMonday.getDate() - day + (day === 0 ? -6 : 1);
-        requestedMonday.setDate(diff);
-        const mondayStr = requestedMonday.toISOString().split('T')[0];
-
-        const weekConfig = await db.execute({
-            sql: 'SELECT is_open FROM week_configs WHERE week_start_date = ?',
-            args: [mondayStr]
-        });
-
-        const isExplicitlyOpen = weekConfig.rows.length > 0 && weekConfig.rows[0].is_open === 1;
-
-        if (diffDays < 3 && !isExplicitlyOpen) {
-            return res.status(400).json({ 
-                error: 'Leaves must be scheduled at least 3 days in advance unless the week is explicitly opened by an Admin.' 
+            const weekConfig = await db.execute({
+                sql: 'SELECT is_open FROM week_configs WHERE week_start_date = ?',
+                args: [mondayStr]
             });
+
+            const isExplicitlyOpen = weekConfig.rows.length > 0 && weekConfig.rows[0].is_open === 1;
+
+            if (!isExplicitlyOpen) {
+                const today = new Date();
+                today.setHours(0, 0, 0, 0);
+
+                // 1. Current Week Rule: Always locked
+                const currentMonday = new Date(today);
+                const currentDay = currentMonday.getDay();
+                currentMonday.setDate(currentMonday.getDate() - currentDay + (currentDay === 0 ? -6 : 1));
+
+                if (mondayStr === currentMonday.toISOString().split('T')[0]) {
+                    return res.status(400).json({ error: 'Current week is locked for leave submissions.' });
+                }
+
+                // 2. Next Week Rule: Locked starting Friday
+                const nextMonday = new Date(currentMonday);
+                nextMonday.setDate(nextMonday.getDate() + 7);
+
+                if (mondayStr === nextMonday.toISOString().split('T')[0]) {
+                    const todayDay = today.getDay(); // 0=Sun, 5=Fri, 6=Sat
+                    if (todayDay === 5 || todayDay === 6 || todayDay === 0) {
+                        return res.status(400).json({ error: 'Next week is locked for submissions starting Friday.' });
+                    }
+                }
+
+                // 3. 3-Day General Lead Time Rule
+                const diffTime = startDateObj.getTime() - today.getTime();
+                const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+                if (diffDays < 3) {
+                    return res.status(400).json({ error: 'Leaves must be scheduled at least 3 days in advance.' });
+                }
+            }
+
+            const id = randomUUID();
+            await db.execute({
+                sql: 'INSERT INTO leaves (id, user_id, start_date, end_date, reason) VALUES (?, ?, ?, ?, ?)',
+                args: [id, userId, start_date, end_date, reason || null]
+            });
+
+            res.status(201).json({ id, start_date, end_date, reason, status: 'pending' });
+        } catch (error) {
+            console.error(error);
+            res.status(500).json({ error: 'Failed to submit leave request' });
         }
-
-        const id = randomUUID();
-        await db.execute({
-            sql: 'INSERT INTO leaves (id, user_id, start_date, end_date, reason) VALUES (?, ?, ?, ?, ?)',
-            args: [id, userId, start_date, end_date, reason || null]
-        });
-
-        res.status(201).json({ id, start_date, end_date, reason, status: 'pending' });
-    } catch (error) {
-        console.error(error);
-        res.status(500).json({ error: 'Failed to submit leave request' });
-    }
-});
+    });
 
 // Admin: Update leave status
 router.patch('/:id/status', requireAdmin, async (req: AuthRequest, res: Response) => {

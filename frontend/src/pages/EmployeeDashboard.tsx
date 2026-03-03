@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { LogOut, CheckCircle2, Circle, Clock, Flame, Award, ShieldAlert, RefreshCw, ListTodo, Calendar } from 'lucide-react';
+import { LogOut, CheckCircle2, Circle, Clock, Flame, Award, ShieldAlert, RefreshCw, ListTodo, Calendar, ChevronLeft, ChevronRight } from 'lucide-react';
 import api from '../api/client';
 import Confetti from 'react-confetti';
 import { useWindowSize } from 'react-use';
@@ -14,6 +14,7 @@ export default function EmployeeDashboard() {
     const user = JSON.parse(localStorage.getItem('user') || '{}');
     const { width, height } = useWindowSize();
     const [activeTab, setActiveTab] = useState<'tasks' | 'roaster'>('tasks');
+    const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
 
     // Easter egg states
     const [logoClicks, setLogoClicks] = useState(0);
@@ -25,11 +26,11 @@ export default function EmployeeDashboard() {
             fetchTasks();
         }, 5000);
         return () => clearInterval(interval);
-    }, []);
+    }, [selectedDate]);
 
     const fetchTasks = async () => {
         try {
-            const { data } = await api.get('/tasks');
+            const { data } = await api.get(`/tasks?date=${selectedDate}`);
             setTasks(data);
         } catch (e) {
             console.error(e);
@@ -131,6 +132,33 @@ export default function EmployeeDashboard() {
                         </h1>
                     </div>
                     <div className="flex items-center gap-2 md:gap-4 shrink-0">
+                        {activeTab === 'tasks' && (
+                            <div className="flex items-center gap-2 bg-muted/30 p-1.5 rounded-xl border border-white/5 mr-2">
+                                <button
+                                    onClick={() => {
+                                        const d = new Date(selectedDate);
+                                        d.setDate(d.getDate() - 1);
+                                        setSelectedDate(d.toISOString().split('T')[0]);
+                                    }}
+                                    className="p-1.5 hover:bg-white/10 rounded-lg text-muted-foreground hover:text-foreground transition-colors"
+                                >
+                                    <ChevronLeft className="w-4 h-4" />
+                                </button>
+                                <div className="px-2 text-xs font-bold text-foreground min-w-[90px] text-center">
+                                    {selectedDate === new Date().toISOString().split('T')[0] ? 'Today' : selectedDate}
+                                </div>
+                                <button
+                                    onClick={() => {
+                                        const d = new Date(selectedDate);
+                                        d.setDate(d.getDate() + 1);
+                                        setSelectedDate(d.toISOString().split('T')[0]);
+                                    }}
+                                    className="p-1.5 hover:bg-white/10 rounded-lg text-muted-foreground hover:text-foreground transition-colors"
+                                >
+                                    <ChevronRight className="w-4 h-4" />
+                                </button>
+                            </div>
+                        )}
                         <div className="hidden sm:flex bg-muted/30 p-1 rounded-xl border border-white/5 mr-2">
                             <button
                                 onClick={() => setActiveTab('tasks')}
