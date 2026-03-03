@@ -194,7 +194,7 @@ router.patch('/:id/status', async (req: AuthRequest, res: Response): Promise<voi
 // Update a specific task (Employees can only update tasks they created)
 router.put('/:id', async (req: AuthRequest, res: Response): Promise<void> => {
     const { id } = req.params;
-    const { title } = req.body;
+    const { title, description, deadline } = req.body;
 
     if (!title) {
         res.status(400).json({ error: 'Title is required' });
@@ -217,8 +217,8 @@ router.put('/:id', async (req: AuthRequest, res: Response): Promise<void> => {
         }
 
         await db.execute({
-            sql: 'UPDATE tasks SET title = ? WHERE id = ?',
-            args: [title as string, id as string]
+            sql: 'UPDATE tasks SET title = ?, description = ?, deadline = ? WHERE id = ?',
+            args: [title as string, description ? (description as string) : null, deadline ? (deadline as string) : null, id as string]
         });
 
         res.json({ message: 'Task updated successfully' });

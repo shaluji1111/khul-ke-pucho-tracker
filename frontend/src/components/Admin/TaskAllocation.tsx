@@ -22,6 +22,12 @@ export default function TaskAllocation() {
     const [editTemplateTitle, setEditTemplateTitle] = useState('');
     const [editTemplateDesc, setEditTemplateDesc] = useState('');
 
+    // For editing active tasks
+    const [editingTask, setEditingTask] = useState<any>(null);
+    const [editTaskTitle, setEditTaskTitle] = useState('');
+    const [editTaskDesc, setEditTaskDesc] = useState('');
+    const [editTaskDeadline, setEditTaskDeadline] = useState('');
+
     useEffect(() => {
         fetchData();
         const interval = setInterval(() => {
@@ -94,6 +100,28 @@ export default function TaskAllocation() {
                 description: editTemplateDesc
             });
             setEditingTemplate(null);
+            fetchData();
+        } catch (e) {
+            console.error(e);
+        }
+    };
+
+    const openEditTask = (task: any) => {
+        setEditingTask(task);
+        setEditTaskTitle(task.title);
+        setEditTaskDesc(task.description || '');
+        setEditTaskDeadline(task.deadline ? new Date(task.deadline).toISOString().slice(0, 16) : '');
+    };
+
+    const handleEditTask = async (id: string) => {
+        if (!editTaskTitle.trim()) return;
+        try {
+            await api.put(`/tasks/${id}`, {
+                title: editTaskTitle,
+                description: editTaskDesc,
+                deadline: editTaskDeadline || null
+            });
+            setEditingTask(null);
             fetchData();
         } catch (e) {
             console.error(e);
@@ -214,40 +242,73 @@ export default function TaskAllocation() {
                             <div className="space-y-3">
                                 {tasks.map(t => (
                                     <div key={t.id} className="glass border border-border/50 rounded-xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4 hover:border-primary/40 transition-colors">
-                                        <div>
-                                            <div className="flex items-center gap-2">
-                                                <h4 className="font-bold text-lg text-foreground">{t.title}</h4>
+                                        {editingTask?.id === t.id ? (
+                                            <div className="flex-1 space-y-3 w-full">
+                                                <input
+                                                    className="w-full bg-input/50 border border-border/60 rounded-lg px-3 py-2 text-sm text-foreground focus:ring-2 focus:ring-primary/50 transition-all font-medium"
+                                                    value={editTaskTitle}
+                                                    onChange={e => setEditTaskTitle(e.target.value)}
+                                                    placeholder="Task Title"
+                                                    autoFocus
+                                                />
                                                 {t.type === 'miscellaneous' && (
-                                                    <span className="bg-amber-500/20 text-amber-500 text-[10px] font-black uppercase px-2 py-0.5 rounded-md flex items-center gap-1 border border-amber-500/30">
-                                                        <Sparkles className="w-3 h-3" /> Bonus
-                                                    </span>
+                                                    <input
+                                                        type="datetime-local"
+                                                        className="w-full bg-input/50 border border-border/60 rounded-lg px-3 py-2 text-sm text-foreground focus:ring-2 focus:ring-primary/50 transition-all font-medium"
+                                                        value={editTaskDeadline}
+                                                        onChange={e => setEditTaskDeadline(e.target.value)}
+                                                    />
                                                 )}
+                                                <div className="flex gap-2 justify-end">
+                                                    <button onClick={() => setEditingTask(null)} className="px-3 py-1.5 text-xs font-bold text-muted-foreground hover:bg-white/5 rounded-lg transition-colors">Cancel</button>
+                                                    <button onClick={() => handleEditTask(t.id)} className="px-3 py-1.5 text-xs font-bold bg-primary text-white hover:bg-primary/90 rounded-lg transition-colors shadow-sm">Save</button>
+                                                </div>
                                             </div>
-                                            <p className="text-sm text-muted-foreground mt-1">Assigned to: <strong className="text-primary/90">{users.find(u => u.name === t.assignee_name)?.full_name ? `${users.find(u => u.name === t.assignee_name)?.full_name} (${t.assignee_name})` : t.assignee_name}</strong></p>
-                                        </div>
+                                        ) : (
+                                            <>
+                                                <div>
+                                                    <div className="flex items-center gap-2">
+                                                        <h4 className="font-bold text-lg text-foreground">{t.title}</h4>
+                                                        {t.type === 'miscellaneous' && (
+                                                            <span className="bg-amber-500/20 text-amber-500 text-[10px] font-black uppercase px-2 py-0.5 rounded-md flex items-center gap-1 border border-amber-500/30">
+                                                                <Sparkles className="w-3 h-3" /> Bonus
+                                                            </span>
+                                                        )}
+                                                    </div>
+                                                    <p className="text-sm text-muted-foreground mt-1">Assigned to: <strong className="text-primary/90">{users.find(u => u.name === t.assignee_name)?.full_name ? `${users.find(u => u.name === t.assignee_name)?.full_name} (${t.assignee_name})` : t.assignee_name}</strong></p>
+                                                </div>
 
-                                        <div className="flex flex-col items-end gap-2">
-                                            {t.deadline && t.type === 'miscellaneous' && (
-                                                <span className="text-xs font-bold text-amber-500/80 bg-amber-500/10 px-2 py-1 rounded-md border border-amber-500/20">
-                                                    Due: {new Date(t.deadline).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
-                                                </span>
-                                            )}
-                                            <div className="flex items-center gap-3">
-                                                {t.status === 'completed' ? (
-                                                    <span className="flex items-center gap-1.5 text-sm font-bold text-emerald-400 bg-emerald-400/10 px-3 py-1.5 rounded-lg border border-emerald-400/20">
-                                                        <CheckCircle2 className="w-4 h-4" /> Completed
-                                                    </span>
-                                                ) : t.status === 'in_progress' ? (
-                                                    <span className="flex items-center gap-1.5 text-sm font-bold text-blue-400 bg-blue-400/10 px-3 py-1.5 rounded-lg border border-blue-400/20">
-                                                        <Clock className="w-4 h-4" /> In Progress
-                                                    </span>
-                                                ) : (
-                                                    <span className="flex items-center gap-1.5 text-sm font-bold text-muted-foreground bg-muted/40 px-3 py-1.5 rounded-lg border border-border/50">
-                                                        Pending
-                                                    </span>
-                                                )}
-                                            </div>
-                                        </div>
+                                                <div className="flex flex-col items-end gap-2">
+                                                    {t.deadline && t.type === 'miscellaneous' && (
+                                                        <span className="text-xs font-bold text-amber-500/80 bg-amber-500/10 px-2 py-1 rounded-md border border-amber-500/20">
+                                                            Due: {new Date(t.deadline).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                                                        </span>
+                                                    )}
+                                                    <div className="flex items-center gap-3">
+                                                        <button
+                                                            onClick={() => openEditTask(t)}
+                                                            className="p-1.5 text-muted-foreground hover:bg-primary/10 hover:text-primary rounded-lg transition-colors"
+                                                            title="Edit Task"
+                                                        >
+                                                            <Pencil className="w-4 h-4" />
+                                                        </button>
+                                                        {t.status === 'completed' ? (
+                                                            <span className="flex items-center gap-1.5 text-sm font-bold text-emerald-400 bg-emerald-400/10 px-3 py-1.5 rounded-lg border border-emerald-400/20">
+                                                                <CheckCircle2 className="w-4 h-4" /> Completed
+                                                            </span>
+                                                        ) : t.status === 'in_progress' ? (
+                                                            <span className="flex items-center gap-1.5 text-sm font-bold text-blue-400 bg-blue-400/10 px-3 py-1.5 rounded-lg border border-blue-400/20">
+                                                                <Clock className="w-4 h-4" /> In Progress
+                                                            </span>
+                                                        ) : (
+                                                            <span className="flex items-center gap-1.5 text-sm font-bold text-muted-foreground bg-muted/40 px-3 py-1.5 rounded-lg border border-border/50">
+                                                                Pending
+                                                            </span>
+                                                        )}
+                                                    </div>
+                                                </div>
+                                            </>
+                                        )}
                                     </div>
                                 ))}
                                 {tasks.length === 0 && (
