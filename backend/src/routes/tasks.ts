@@ -11,7 +11,7 @@ router.use(authenticateToken);
 
 // Create a new task (Admin sets assignment, Employee self-assigns)
 router.post('/', async (req: AuthRequest, res: Response): Promise<void> => {
-    const { title, description, type, assigned_to, deadline } = req.body;
+    const { title, description, type, assigned_to, deadline, points } = req.body;
 
     if (!title || typeof title !== 'string' || title.length > 200) {
         res.status(400).json({ error: 'Title is required and must be under 200 characters' });
@@ -32,8 +32,8 @@ router.post('/', async (req: AuthRequest, res: Response): Promise<void> => {
         try {
             const id = generateId();
             await db.execute({
-                sql: 'INSERT INTO tasks (id, title, description, type, assigned_to, deadline, created_by) VALUES (?, ?, ?, ?, ?, ?, ?)',
-                args: [id, title as string, description ? (description as string) : null, 'miscellaneous', req.user?.id as string, deadline ? (deadline as string) : null, req.user?.id as string]
+                sql: 'INSERT INTO tasks (id, title, description, type, assigned_to, deadline, created_by, points) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+                args: [id, title as string, description ? (description as string) : null, 'miscellaneous', req.user?.id as string, deadline ? (deadline as string) : null, req.user?.id as string, 25]
             });
             res.status(201).json({ id, title, type: 'miscellaneous', assigned_to: req.user?.id, status: 'pending', deadline, created_by: req.user?.id });
         } catch (error) {
@@ -50,9 +50,10 @@ router.post('/', async (req: AuthRequest, res: Response): Promise<void> => {
 
     try {
         const id = generateId();
+        const taskPoints = points !== undefined ? Number(points) : (type === 'daily' ? 10 : 25);
         await db.execute({
-            sql: 'INSERT INTO tasks (id, title, description, type, assigned_to, deadline, created_by) VALUES (?, ?, ?, ?, ?, ?, ?)',
-            args: [id, title as string, description ? (description as string) : null, type as string, assigned_to as string, deadline ? (deadline as string) : null, req.user?.id as string]
+            sql: 'INSERT INTO tasks (id, title, description, type, assigned_to, deadline, created_by, points) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+            args: [id, title as string, description ? (description as string) : null, type as string, assigned_to as string, deadline ? (deadline as string) : null, req.user?.id as string, taskPoints]
         });
 
         res.status(201).json({ id, title, type, assigned_to, status: 'pending', deadline, created_by: req.user?.id });
@@ -194,7 +195,7 @@ router.patch('/:id/status', async (req: AuthRequest, res: Response): Promise<voi
 // Update a specific task (Employees can only update tasks they created)
 router.put('/:id', async (req: AuthRequest, res: Response): Promise<void> => {
     const { id } = req.params;
-    const { title, description, deadline, assigned_to } = req.body;
+    const { title, description, deadline, assigned_to, points } = req.body;
 
     if (!title) {
         res.status(400).json({ error: 'Title is required' });
@@ -217,8 +218,8 @@ router.put('/:id', async (req: AuthRequest, res: Response): Promise<void> => {
         }
 
         await db.execute({
-            sql: 'UPDATE tasks SET title = ?, description = ?, deadline = ?, assigned_to = ? WHERE id = ?',
-            args: [title as string, description ? (description as string) : null, deadline ? (deadline as string) : null, assigned_to as string, id as string]
+            sql: 'UPDATE tasks SET title = ?, description = ?, deadline = ?, assigned_to = ?, points = ? WHERE id = ?',
+            args: [title as string, description ? (description as string) : null, deadline ? (deadline as string) : null, assigned_to as string, points !== undefined ? Number(points) : null, id as string]
         });
 
         res.json({ message: 'Task updated successfully' });
@@ -287,8 +288,8 @@ router.get('/', async (req: AuthRequest, res: Response): Promise<void> => {
                 for (const rt of recurringResult.rows) {
                     if (!existingTitles.has(rt.title as string)) {
                         await db.execute({
-                            sql: 'INSERT INTO tasks (id, title, description, type, assigned_to) VALUES (?, ?, ?, ?, ?)',
-                            args: [generateId(), rt.title as string, rt.description ? (rt.description as string) : null, 'daily', req.user?.id!]
+                            sql: 'INSERT INTO tasks (id, title, description, type, assigned_to, points) VALUES (?, ?, ?, ?, ?, ?)',
+                            args: [generateId(), rt.title as string, rt.description ? (rt.description as string) : null, 'daily', req.user?.id!, 10]
                         });
                     }
                 }
@@ -342,6 +343,7 @@ router.get('/metrics', requireAdmin, async (req: AuthRequest, res: Response): Pr
         SUM(CASE WHEN t.type = 'daily' AND t.status = 'completed' AND ${dateCondition} THEN 1 ELSE 0 END) as daily_completed,
         SUM(CASE WHEN t.type = 'daily' AND ${dateCondition} THEN 1 ELSE 0 END) as daily_total,
         SUM(CASE WHEN t.type = 'miscellaneous' AND t.status = 'completed' AND ${dateCondition} THEN 1 ELSE 0 END) as extra_completed,
+        SUM(CASE WHEN t.status = 'completed' AND ${dateCondition} THEN t.points ELSE 0 END) as total_points_db,
         ROUND(AVG(CASE WHEN t.status = 'completed' AND ${dateCondition} 
             THEN (JULIANDAY(t.completed_at) - JULIANDAY(t.created_at)) * 24 ELSE NULL END), 1) as avg_completion_hours,
         SUM(CASE WHEN t.status = 'completed' AND t.deadline IS NOT NULL AND t.completed_at > t.deadline AND ${dateCondition} THEN 1 ELSE 0 END) as overdue_count
@@ -361,7 +363,7 @@ router.get('/metrics', requireAdmin, async (req: AuthRequest, res: Response): Pr
 
         const metricsWithPoints = result.rows.map((row: any) => ({
             ...row,
-            total_points: (Number(row.daily_completed || 0) * 10) + (Number(row.extra_completed || 0) * 25)
+            total_points: Number(row.total_points_db || 0)
         }));
 
         res.json(metricsWithPoints);
@@ -396,8 +398,7 @@ router.get('/report/:userId', requireAdmin, async (req: AuthRequest, res: Respon
             sql: `
                 SELECT 
                     DATE(created_at, 'localtime') as date,
-                    SUM(CASE WHEN type = 'daily' AND status = 'completed' THEN 10 ELSE 0 END) +
-                    SUM(CASE WHEN type = 'miscellaneous' AND status = 'completed' THEN 25 ELSE 0 END) as points
+                    SUM(CASE WHEN status = 'completed' THEN points ELSE 0 END) as points
                 FROM tasks t
                 WHERE assigned_to = ? AND ${dateCondition}
                 GROUP BY DATE(created_at, 'localtime')

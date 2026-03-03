@@ -28,6 +28,7 @@ CREATE TABLE IF NOT EXISTS tasks (
     assigned_to TEXT NOT NULL,
     status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'in_progress', 'completed')),
     deadline DATETIME,
+    points INTEGER DEFAULT 0,
     created_by TEXT,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     completed_at DATETIME,
