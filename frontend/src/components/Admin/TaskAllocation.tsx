@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { ClipboardList, Sparkles, CheckCircle2, Clock, Trash2, RefreshCw } from 'lucide-react';
+import { ClipboardList, Sparkles, CheckCircle2, Clock, Trash2, RefreshCw, Pencil } from 'lucide-react';
 import api from '../../api/client';
 
 export default function TaskAllocation() {
@@ -15,6 +15,12 @@ export default function TaskAllocation() {
     const [loading, setLoading] = useState(false);
 
     const [listTab, setListTab] = useState<'tasks' | 'templates'>('tasks');
+    const [templateEmployeeFilter, setTemplateEmployeeFilter] = useState<string>('all');
+
+    // For editing templates
+    const [editingTemplate, setEditingTemplate] = useState<any>(null);
+    const [editTemplateTitle, setEditTemplateTitle] = useState('');
+    const [editTemplateDesc, setEditTemplateDesc] = useState('');
 
     useEffect(() => {
         fetchData();
@@ -74,6 +80,26 @@ export default function TaskAllocation() {
         }
     };
 
+    const openEditTemplate = (template: any) => {
+        setEditingTemplate(template);
+        setEditTemplateTitle(template.title);
+        setEditTemplateDesc(template.description || '');
+    };
+
+    const handleEditTemplate = async (id: string) => {
+        if (!editTemplateTitle.trim()) return;
+        try {
+            await api.put(`/tasks/recurring/${id}`, {
+                title: editTemplateTitle,
+                description: editTemplateDesc
+            });
+            setEditingTemplate(null);
+            fetchData();
+        } catch (e) {
+            console.error(e);
+        }
+    };
+
     return (
         <div className="space-y-8 animate-slide-up">
             <div className="flex items-center justify-between">
@@ -124,7 +150,7 @@ export default function TaskAllocation() {
                                     onChange={e => setType(e.target.value)}
                                 >
                                     <option value="daily">Daily Template (Recurring)</option>
-                                    <option value="miscellaneous">Extra Bonus (One-off)</option>
+                                    <option value="miscellaneous">Extra Bonus (One-time)</option>
                                 </select>
                             </div>
                             <div>
@@ -233,29 +259,73 @@ export default function TaskAllocation() {
                         </>
                     ) : (
                         <div className="space-y-3 pt-2">
-                            {recurringTasks.map(rt => (
-                                <div key={rt.id} className="glass border border-border/50 rounded-xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4 hover:border-accent/40 transition-colors">
-                                    <div>
-                                        <h4 className="font-bold text-lg text-foreground flex items-center gap-2">
-                                            {rt.title}
-                                            <span className="bg-primary/20 text-primary text-[10px] font-black uppercase px-2 py-0.5 rounded-md border border-primary/30">
-                                                Daily
-                                            </span>
-                                        </h4>
-                                        <p className="text-sm text-muted-foreground mt-1">Assigned to: <strong className="text-accent/90">{users.find(u => u.name === rt.assignee_name)?.full_name ? `${users.find(u => u.name === rt.assignee_name)?.full_name} (${rt.assignee_name})` : rt.assignee_name}</strong></p>
+                            {/* Filter Dropdown */}
+                            <div className="mb-4">
+                                <label className="block text-sm font-bold text-muted-foreground mb-2">Filter Templates by Employee</label>
+                                <select
+                                    className="w-full sm:w-64 bg-input/50 border border-border/60 rounded-xl px-4 py-2 text-sm text-foreground focus:ring-2 focus:ring-accent/50 transition-all font-medium appearance-none"
+                                    value={templateEmployeeFilter}
+                                    onChange={e => setTemplateEmployeeFilter(e.target.value)}
+                                >
+                                    <option value="all">All Employees</option>
+                                    {users.map(u => (
+                                        <option key={u.id} value={u.name}>{u.full_name ? `${u.full_name} (${u.name})` : u.name}</option>
+                                    ))}
+                                </select>
+                            </div>
+
+                            {recurringTasks
+                                .filter(rt => templateEmployeeFilter === 'all' || rt.assignee_name === templateEmployeeFilter)
+                                .map(rt => (
+                                    <div key={rt.id} className="glass border border-border/50 rounded-xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4 hover:border-accent/40 transition-colors">
+                                        {editingTemplate?.id === rt.id ? (
+                                            <div className="flex-1 space-y-3 w-full">
+                                                <input
+                                                    className="w-full bg-input/50 border border-border/60 rounded-lg px-3 py-2 text-sm text-foreground focus:ring-2 focus:ring-accent/50 transition-all font-medium"
+                                                    value={editTemplateTitle}
+                                                    onChange={e => setEditTemplateTitle(e.target.value)}
+                                                    placeholder="Task Title"
+                                                    autoFocus
+                                                />
+                                                <div className="flex gap-2 justify-end">
+                                                    <button onClick={() => setEditingTemplate(null)} className="px-3 py-1.5 text-xs font-bold text-muted-foreground hover:bg-white/5 rounded-lg transition-colors">Cancel</button>
+                                                    <button onClick={() => handleEditTemplate(rt.id)} className="px-3 py-1.5 text-xs font-bold bg-accent text-white hover:bg-accent/90 rounded-lg transition-colors shadow-sm">Save</button>
+                                                </div>
+                                            </div>
+                                        ) : (
+                                            <>
+                                                <div>
+                                                    <h4 className="font-bold text-lg text-foreground flex items-center gap-2">
+                                                        {rt.title}
+                                                        <span className="bg-primary/20 text-primary text-[10px] font-black uppercase px-2 py-0.5 rounded-md border border-primary/30">
+                                                            Daily
+                                                        </span>
+                                                    </h4>
+                                                    <p className="text-sm text-muted-foreground mt-1">Assigned to: <strong className="text-accent/90">{users.find(u => u.name === rt.assignee_name)?.full_name ? `${users.find(u => u.name === rt.assignee_name)?.full_name} (${rt.assignee_name})` : rt.assignee_name}</strong></p>
+                                                </div>
+                                                <div className="flex items-center gap-1 shrink-0">
+                                                    <button
+                                                        onClick={() => openEditTemplate(rt)}
+                                                        className="p-2.5 text-muted-foreground hover:bg-accent/10 hover:text-accent rounded-xl transition-colors"
+                                                        title="Edit Template"
+                                                    >
+                                                        <Pencil className="w-5 h-5" />
+                                                    </button>
+                                                    <button
+                                                        onClick={() => handleDeleteTemplate(rt.id)}
+                                                        className="p-2.5 text-muted-foreground hover:bg-destructive/10 hover:text-destructive rounded-xl transition-colors"
+                                                        title="Delete Template"
+                                                    >
+                                                        <Trash2 className="w-5 h-5" />
+                                                    </button>
+                                                </div>
+                                            </>
+                                        )}
                                     </div>
-                                    <button
-                                        onClick={() => handleDeleteTemplate(rt.id)}
-                                        className="p-3 text-muted-foreground hover:bg-destructive/10 hover:text-destructive rounded-xl transition-colors shrink-0"
-                                        title="Delete Template"
-                                    >
-                                        <Trash2 className="w-5 h-5" />
-                                    </button>
-                                </div>
-                            ))}
-                            {recurringTasks.length === 0 && (
+                                ))}
+                            {recurringTasks.filter(rt => templateEmployeeFilter === 'all' || rt.assignee_name === templateEmployeeFilter).length === 0 && (
                                 <div className="text-center p-10 glass rounded-xl border border-dashed border-border text-muted-foreground font-medium">
-                                    No daily templates established.
+                                    No daily templates found for this selection.
                                 </div>
                             )}
                         </div>

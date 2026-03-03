@@ -104,6 +104,45 @@ router.get('/recurring', requireAdmin, async (req: AuthRequest, res: Response): 
     }
 });
 
+// Update Recurring Task
+router.put('/recurring/:id', requireAdmin, async (req: AuthRequest, res: Response): Promise<void> => {
+    const { title, description } = req.body;
+
+    if (!title || typeof title !== 'string' || title.length > 200) {
+        res.status(400).json({ error: 'Title is required and must be under 200 characters' });
+        return;
+    }
+
+    if (description && (typeof description !== 'string' || description.length > 2000)) {
+        res.status(400).json({ error: 'Description must be under 2000 characters' });
+        return;
+    }
+
+    try {
+        const id = req.params.id;
+
+        const check = await db.execute({
+            sql: 'SELECT id FROM recurring_tasks WHERE id = ?',
+            args: [id as string]
+        });
+
+        if (check.rows.length === 0) {
+            res.status(404).json({ error: 'Recurring task not found' });
+            return;
+        }
+
+        await db.execute({
+            sql: 'UPDATE recurring_tasks SET title = ?, description = ? WHERE id = ?',
+            args: [title as string, description ? (description as string) : null, id as string]
+        });
+
+        res.json({ message: 'Recurring task updated', id, title, description });
+    } catch (error) {
+        console.error('Error updating recurring task:', error);
+        res.status(500).json({ error: 'Failed to update recurring task' });
+    }
+});
+
 // Delete Recurring Task
 router.delete('/recurring/:id', requireAdmin, async (req: AuthRequest, res: Response): Promise<void> => {
     try {
