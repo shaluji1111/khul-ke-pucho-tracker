@@ -9,6 +9,7 @@ export default function HolidayRoaster({ isAdmin = false }: { isAdmin?: boolean 
     const [endDate, setEndDate] = useState('');
     const [reason, setReason] = useState('');
     const [loading, setLoading] = useState(false);
+    const [togglingWeek, setTogglingWeek] = useState<string | null>(null);
     const [error, setError] = useState('');
 
     useEffect(() => {
@@ -55,11 +56,15 @@ export default function HolidayRoaster({ isAdmin = false }: { isAdmin?: boolean 
     };
 
     const toggleWeek = async (weekStart: string, currentlyOpen: boolean) => {
+        setTogglingWeek(weekStart);
         try {
             await api.post('/leaves/week-configs', { week_start_date: weekStart, is_open: !currentlyOpen });
-            fetchData();
+            await fetchData();
         } catch (e) {
             console.error(e);
+            setError('Failed to update week status');
+        } finally {
+            setTogglingWeek(null);
         }
     };
 
@@ -134,10 +139,13 @@ export default function HolidayRoaster({ isAdmin = false }: { isAdmin?: boolean 
                                     const d = new Date();
                                     const day = d.getDay();
                                     const diff = d.getDate() - day + (day === 0 ? -6 : 1) + (offset * 7);
-                                    const monday = new Date(d.setDate(diff));
-                                    const mondayStr = monday.toISOString().split('T')[0];
+                                    const monday = new Date();
+                                    monday.setDate(diff);
+
+                                    const mondayStr = `${monday.getFullYear()}-${String(monday.getMonth() + 1).padStart(2, '0')}-${String(monday.getDate()).padStart(2, '0')}`;
                                     const config = weekConfigs.find(c => c.week_start_date === mondayStr);
-                                    const isOpen = config?.is_open === 1;
+                                    const isOpen = config?.is_open == 1 || config?.is_open === true;
+                                    const isToggling = togglingWeek === mondayStr;
 
                                     return (
                                         <div key={mondayStr} className="flex items-center justify-between p-3 bg-muted/30 rounded-2xl border border-border/40">
@@ -147,8 +155,9 @@ export default function HolidayRoaster({ isAdmin = false }: { isAdmin?: boolean 
                                                 {offset === 1 && <p className="text-[9px] text-amber-500 font-bold uppercase mt-0.5">Locks this Friday</p>}
                                             </div>
                                             <button
+                                                disabled={isToggling}
                                                 onClick={() => toggleWeek(mondayStr, isOpen)}
-                                                className={`p-2 rounded-xl transition-all ${isOpen ? 'bg-emerald-500/10 text-emerald-500' : 'bg-muted/50 text-muted-foreground hover:text-amber-500 hover:bg-amber-500/10'}`}
+                                                className={`p-2 rounded-xl transition-all ${isToggling ? 'opacity-50 animate-pulse' : ''} ${isOpen ? 'bg-emerald-500/10 text-emerald-500' : 'bg-muted/50 text-muted-foreground hover:text-amber-500 hover:bg-amber-500/10'}`}
                                                 title={isOpen ? 'Unlocked (Admin Override)' : 'Locked (Standard Rules)'}
                                             >
                                                 {isOpen ? <Unlock className="w-5 h-5" /> : <Lock className="w-5 h-5" />}
