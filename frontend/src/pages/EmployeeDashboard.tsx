@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { LogOut, CheckCircle2, Circle, Clock, Flame, Award, ShieldAlert, RefreshCw, ListTodo, Calendar, ChevronLeft, ChevronRight } from 'lucide-react';
+import { LogOut, CheckCircle2, Circle, Clock, Flame, Award, ShieldAlert, RefreshCw, ListTodo, Calendar, ChevronLeft, ChevronRight, Copy } from 'lucide-react';
 import api from '../api/client';
 import Confetti from 'react-confetti';
 import { useWindowSize } from 'react-use';
@@ -19,6 +19,8 @@ export default function EmployeeDashboard() {
     // Easter egg states
     const [logoClicks, setLogoClicks] = useState(0);
     const [nightMode, setNightMode] = useState(false);
+
+    const [copied, setCopied] = useState(false);
 
     useEffect(() => {
         fetchTasks();
@@ -95,6 +97,37 @@ export default function EmployeeDashboard() {
     const getPercentage = () => {
         if (dailyTasks.length === 0) return 0;
         return Math.round((dailyCompleted / dailyTasks.length) * 100);
+    };
+
+    const handleCopyDPR = () => {
+        const completedDaily = dailyTasks.filter(t => t.status === 'completed');
+        const completedBonus = bonusTasks.filter(t => t.status === 'completed');
+
+        let dprText = `*DPR - ${new Date(selectedDate).toLocaleDateString()}*\n\n`;
+        dprText += `*Name:* ${user.name}\n\n`;
+        dprText += `*Baseline Tasks:*\n`;
+        if (completedDaily.length > 0) {
+            completedDaily.forEach((t, i) => {
+                dprText += `${i + 1}. ${t.title}\n`;
+            });
+        } else {
+            dprText += `None\n`;
+        }
+
+        dprText += `\n*Bonus Tasks:*\n`;
+        if (completedBonus.length > 0) {
+            completedBonus.forEach((t, i) => {
+                dprText += `${i + 1}. ${t.title}\n`;
+            });
+        } else {
+            dprText += `None\n`;
+        }
+
+        dprText += `\n*Total Completion:* ${getPercentage()}%\n`;
+
+        navigator.clipboard.writeText(dprText);
+        setCopied(true);
+        setTimeout(() => setCopied(false), 2000);
     };
 
     const handleLogoClick = () => {
@@ -296,6 +329,17 @@ export default function EmployeeDashboard() {
                                         </div>
                                     )}
                                 </div>
+
+                                <div className="mt-8 flex justify-end pb-20 sm:pb-8">
+                                    <button
+                                        onClick={handleCopyDPR}
+                                        className="flex items-center gap-2 px-6 py-3 bg-primary/20 hover:bg-primary/30 text-primary border border-primary/30 rounded-full transition-colors shadow-lg font-bold text-sm"
+                                        title="Copy all completed tasks for the day"
+                                    >
+                                        {copied ? <CheckCircle2 className="w-5 h-5" /> : <Copy className="w-5 h-5" />}
+                                        {copied ? 'Copied to Clipboard!' : 'Copy DPR'}
+                                    </button>
+                                </div>
                             </section>
 
                         </div>
@@ -370,6 +414,11 @@ function TaskCard({ task, onUpdate, isBonus, currentUser, onEdit, onDelete }: { 
                 )}
                 {task.description && (
                     <p className="text-muted-foreground text-sm mt-1">{task.description}</p>
+                )}
+                {task.deadline && task.type === 'miscellaneous' && (
+                    <div className="mt-2 text-xs font-bold text-amber-500/80 bg-amber-500/10 px-2 py-1 rounded-md border border-amber-500/20 w-fit">
+                        Due: {new Date(task.deadline).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                    </div>
                 )}
             </div>
 
