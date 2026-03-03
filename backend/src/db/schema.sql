@@ -60,3 +60,10 @@ CREATE TABLE IF NOT EXISTS week_configs (
     is_open BOOLEAN NOT NULL DEFAULT 0,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
+
+-- Add points column (safe even if exists due to migrate.ts ignoring duplicate column errors)
+ALTER TABLE tasks ADD COLUMN points INTEGER DEFAULT 0;
+
+-- Set default points
+UPDATE tasks SET points = 10 WHERE type = 'daily' AND points = 0;
+UPDATE tasks SET points = 25 WHERE type = 'miscellaneous' AND (points IS NULL OR points = 0);
