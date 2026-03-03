@@ -1,11 +1,13 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { LogOut, CheckCircle2, Circle, Clock, Flame, Award, ShieldAlert, RefreshCw } from 'lucide-react';
+import { LogOut, CheckCircle2, Circle, Clock, Flame, Award, ShieldAlert, RefreshCw, Calendar } from 'lucide-react';
 import api from '../api/client';
 import Confetti from 'react-confetti';
 import { useWindowSize } from 'react-use';
+import HolidayRoaster from '../components/HolidayRoaster';
 
 export default function EmployeeDashboard() {
+    const [activeTab, setActiveTab] = useState<'tasks' | 'roaster'>('tasks');
     const [tasks, setTasks] = useState<any[]>([]);
     const [newTaskTitle, setNewTaskTitle] = useState('');
     const [isSubmitting, setIsSubmitting] = useState(false);
@@ -124,9 +126,24 @@ export default function EmployeeDashboard() {
                         <div className={`w-8 h-8 md:w-10 md:h-10 shrink-0 cursor-pointer rounded-xl flex items-center justify-center text-white font-black shadow-[0_0_15px_rgba(255,107,158,0.3)] transition-colors duration-500 overflow-hidden`}>
                             <img src="/logo.jpg" alt="Khul Ke Pucho" className="w-full h-full object-cover" />
                         </div>
-                        <h1 className="text-sm md:text-xl font-bold text-foreground truncate pl-1">
+                        <h1 className="text-sm md:text-xl font-bold text-foreground truncate pl-1 mr-4">
                             Welcome, <span className="text-transparent bg-clip-text bg-gradient-to-r from-primary to-accent">{user.name}</span>
                         </h1>
+
+                        <nav className="hidden md:flex items-center gap-1 bg-muted/20 p-1 rounded-xl border border-border/50">
+                            <button
+                                onClick={() => setActiveTab('tasks')}
+                                className={`px-4 py-2 rounded-lg text-sm font-bold transition-all ${activeTab === 'tasks' ? 'bg-primary text-white shadow-lg shadow-primary/25' : 'text-muted-foreground hover:text-foreground'}`}
+                            >
+                                Tasks
+                            </button>
+                            <button
+                                onClick={() => setActiveTab('roaster')}
+                                className={`px-4 py-2 rounded-lg text-sm font-bold transition-all ${activeTab === 'roaster' ? 'bg-primary text-white shadow-lg shadow-primary/25' : 'text-muted-foreground hover:text-foreground'}`}
+                            >
+                                Roaster
+                            </button>
+                        </nav>
                     </div>
                     <div className="flex items-center gap-2 md:gap-4 shrink-0">
                         <button
@@ -146,10 +163,13 @@ export default function EmployeeDashboard() {
                 </div>
             </header>
 
-            <main className="max-w-7xl mx-auto px-4 md:px-6 py-6 md:py-10 grid grid-cols-1 lg:grid-cols-12 gap-8 md:gap-10 animate-fade-in relative z-10">
-
-                {/* Progress Sidebar */}
-                <div className="lg:col-span-4 space-y-6">
+            <main className="max-w-7xl mx-auto px-4 md:px-6 py-6 md:py-10 animate-fade-in relative z-10">
+                {activeTab === 'roaster' ? (
+                    <HolidayRoaster isAdmin={false} />
+                ) : (
+                    <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 md:gap-10">
+                        {/* Progress Sidebar */}
+                        <div className="lg:col-span-4 space-y-6">
                     <div className="glass border border-border/50 rounded-3xl p-8 relative overflow-hidden shadow-2xl">
                         <h2 className="text-xl font-black mb-8 flex items-center gap-2">
                             <Award className="w-6 h-6 text-primary" /> Daily Scorecard
@@ -252,8 +272,22 @@ export default function EmployeeDashboard() {
                         </div>
                     </section>
 
-                </div>
+                        </div>
+                    </div>
+                )}
             </main>
+
+            {/* Mobile Bottom Nav */}
+            <nav className="md:hidden fixed bottom-0 w-full glass border-t border-white/5 flex justify-around items-center p-2 z-50 backdrop-blur-2xl">
+                <button onClick={() => setActiveTab('tasks')} className={`p-2 rounded-xl flex flex-col items-center gap-1 flex-1 ${activeTab === 'tasks' ? 'text-primary' : 'text-muted-foreground'}`}>
+                    <Clock className="w-6 h-6" />
+                    <span className="text-[10px] font-bold">Tasks</span>
+                </button>
+                <button onClick={() => setActiveTab('roaster')} className={`p-2 rounded-xl flex flex-col items-center gap-1 flex-1 ${activeTab === 'roaster' ? 'text-primary' : 'text-muted-foreground'}`}>
+                    <Calendar className="w-6 h-6" />
+                    <span className="text-[10px] font-bold">Roaster</span>
+                </button>
+            </nav>
         </div>
     );
 }

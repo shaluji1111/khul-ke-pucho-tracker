@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { ClipboardList, Sparkles, CheckCircle2, Clock, Trash2, RefreshCw } from 'lucide-react';
-import api from '../../api/client';
+import api from "../../api/client";
 
 export default function TaskAllocation() {
     const [tasks, setTasks] = useState<any[]>([]);
