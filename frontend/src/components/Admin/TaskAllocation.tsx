@@ -12,6 +12,7 @@ export default function TaskAllocation() {
     const [type, setType] = useState('daily');
     const [assignedTo, setAssignedTo] = useState('');
     const [deadline, setDeadline] = useState('');
+    const [points, setPoints] = useState('25');
     const [loading, setLoading] = useState(false);
 
     const [listTab, setListTab] = useState<'tasks' | 'templates'>('tasks');
@@ -28,6 +29,7 @@ export default function TaskAllocation() {
     const [editTaskDesc, setEditTaskDesc] = useState('');
     const [editTaskDeadline, setEditTaskDeadline] = useState('');
     const [editTaskAssignee, setEditTaskAssignee] = useState('');
+    const [editTaskPoints, setEditTaskPoints] = useState('');
 
     useEffect(() => {
         fetchData();
@@ -64,7 +66,7 @@ export default function TaskAllocation() {
             if (type === 'daily') {
                 await api.post('/tasks/recurring', { title, description, assigned_to: assignedTo });
             } else {
-                await api.post('/tasks', { title, description, type, assigned_to: assignedTo, deadline: deadline || undefined });
+                await api.post('/tasks', { title, description, type, assigned_to: assignedTo, deadline: deadline || undefined, points: Number(points) });
             }
             setTitle('');
             setDescription('');
@@ -115,6 +117,7 @@ export default function TaskAllocation() {
         setEditTaskDesc(task.description || '');
         setEditTaskDeadline(task.deadline ? new Date(task.deadline).toISOString().slice(0, 16) : '');
         setEditTaskAssignee(task.assigned_to);
+        setEditTaskPoints(task.points?.toString() || (task.type === 'daily' ? '10' : '25'));
     };
 
     const handleEditTask = async (id: string) => {
@@ -124,7 +127,8 @@ export default function TaskAllocation() {
                 title: editTaskTitle,
                 description: editTaskDesc,
                 deadline: editTaskDeadline || null,
-                assigned_to: editTaskAssignee
+                assigned_to: editTaskAssignee,
+                points: Number(editTaskPoints)
             });
             setEditingTask(null);
             fetchData();
@@ -213,15 +217,28 @@ export default function TaskAllocation() {
                         </div>
 
                         {type === 'miscellaneous' && (
-                            <div className="mt-4 animate-fade-in">
-                                <label className="block text-sm font-bold text-muted-foreground mb-2">Deadline</label>
-                                <input
-                                    type="datetime-local"
-                                    required
-                                    className="w-full bg-input/50 border border-border/60 rounded-xl px-4 py-3 text-foreground focus:ring-2 focus:ring-accent/50 transition-all font-medium"
-                                    value={deadline}
-                                    onChange={e => setDeadline(e.target.value)}
-                                />
+                            <div className="grid grid-cols-2 gap-4 animate-fade-in">
+                                <div>
+                                    <label className="block text-sm font-bold text-muted-foreground mb-2">Deadline</label>
+                                    <input
+                                        type="datetime-local"
+                                        required
+                                        className="w-full bg-input/50 border border-border/60 rounded-xl px-4 py-3 text-foreground focus:ring-2 focus:ring-accent/50 transition-all font-medium"
+                                        value={deadline}
+                                        onChange={e => setDeadline(e.target.value)}
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-bold text-muted-foreground mb-2">Points</label>
+                                    <input
+                                        type="number"
+                                        required
+                                        className="w-full bg-input/50 border border-border/60 rounded-xl px-4 py-3 text-foreground focus:ring-2 focus:ring-accent/50 transition-all font-medium"
+                                        value={points}
+                                        onChange={e => setPoints(e.target.value)}
+                                        min="0"
+                                    />
+                                </div>
                             </div>
                         )}
 
@@ -275,14 +292,23 @@ export default function TaskAllocation() {
                                                         <option key={u.id} value={u.id}>{u.full_name ? `${u.full_name} (${u.name})` : u.name}</option>
                                                     ))}
                                                 </select>
-                                                {t.type === 'miscellaneous' && (
+                                                <div className="grid grid-cols-2 gap-3 w-full">
+                                                    {t.type === 'miscellaneous' && (
+                                                        <input
+                                                            type="datetime-local"
+                                                            className="w-full bg-input/50 border border-border/60 rounded-lg px-3 py-2 text-sm text-foreground focus:ring-2 focus:ring-primary/50 transition-all font-medium"
+                                                            value={editTaskDeadline}
+                                                            onChange={e => setEditTaskDeadline(e.target.value)}
+                                                        />
+                                                    )}
                                                     <input
-                                                        type="datetime-local"
+                                                        type="number"
                                                         className="w-full bg-input/50 border border-border/60 rounded-lg px-3 py-2 text-sm text-foreground focus:ring-2 focus:ring-primary/50 transition-all font-medium"
-                                                        value={editTaskDeadline}
-                                                        onChange={e => setEditTaskDeadline(e.target.value)}
+                                                        value={editTaskPoints}
+                                                        onChange={e => setEditTaskPoints(e.target.value)}
+                                                        placeholder="Points"
                                                     />
-                                                )}
+                                                </div>
                                                 <div className="flex gap-2 justify-end">
                                                     <button onClick={() => setEditingTask(null)} className="px-3 py-1.5 text-xs font-bold text-muted-foreground hover:bg-white/5 rounded-lg transition-colors">Cancel</button>
                                                     <button onClick={() => handleEditTask(t.id)} className="px-3 py-1.5 text-xs font-bold bg-primary text-white hover:bg-primary/90 rounded-lg transition-colors shadow-sm">Save</button>
@@ -293,6 +319,9 @@ export default function TaskAllocation() {
                                                 <div>
                                                     <div className="flex items-center gap-2">
                                                         <h4 className="font-bold text-lg text-foreground">{t.title}</h4>
+                                                        <span className="bg-primary/20 text-primary text-[10px] font-black uppercase px-2 py-0.5 rounded-md border border-primary/30 flex items-center gap-1">
+                                                            {t.points || (t.type === 'daily' ? 10 : 25)} pts
+                                                        </span>
                                                         {t.type === 'miscellaneous' && (
                                                             <span className="bg-amber-500/20 text-amber-500 text-[10px] font-black uppercase px-2 py-0.5 rounded-md flex items-center gap-1 border border-amber-500/30">
                                                                 <Sparkles className="w-3 h-3" /> Bonus
