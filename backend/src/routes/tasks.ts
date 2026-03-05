@@ -261,17 +261,25 @@ router.delete('/:id', async (req: AuthRequest, res: Response): Promise<void> => 
 router.get('/', async (req: AuthRequest, res: Response): Promise<void> => {
     try {
         const dateParam = req.query.date as string; // Expects YYYY-MM-DD
-        const targetDateSql = dateParam ? "DATE(?)" : "DATE('now', 'localtime')";
-        const targetDateArgs = dateParam ? [dateParam] : [];
+
+        // Derive today's date in IST (UTC+5:30) — same timezone as the user's browser
+        const nowUtcMs = Date.now();
+        const istOffsetMs = 5.5 * 60 * 60 * 1000;
+        const todayIst = new Date(nowUtcMs + istOffsetMs).toISOString().split('T')[0];
+        // IST datetime string for inserting records (so DATE(created_at) matches IST dates)
+        const istNow = new Date(nowUtcMs + istOffsetMs).toISOString().replace('T', ' ').split('.')[0];
+
+        // Use dateParam if provided, otherwise fall back to today in IST
+        const targetDate = dateParam || todayIst;
 
         if (req.user?.role !== 'admin') {
-            const isToday = !dateParam || dateParam === new Date().toISOString().split('T')[0];
+            const isToday = targetDate === todayIst;
 
             if (isToday) {
-                // Check if the user is currently on an approved leave
+                // Check if the user is currently on an approved leave (compare against IST today)
                 const onLeaveResult = await db.execute({
-                    sql: "SELECT id FROM leaves WHERE user_id = ? AND status = 'approved' AND DATE('now', 'localtime') >= DATE(start_date) AND DATE('now', 'localtime') <= DATE(end_date)",
-                    args: [req.user?.id!]
+                    sql: "SELECT id FROM leaves WHERE user_id = ? AND status = 'approved' AND ? >= DATE(start_date) AND ? <= DATE(end_date)",
+                    args: [req.user?.id!, todayIst, todayIst]
                 });
 
                 if (onLeaveResult.rows.length === 0) {
@@ -281,10 +289,10 @@ router.get('/', async (req: AuthRequest, res: Response): Promise<void> => {
                         args: [req.user?.id!]
                     });
 
-                    // Fetch the daily tasks that have already been generated today for the user
+                    // Fetch the daily tasks already generated today (using DATE(created_at) = todayIst)
                     const todaysTasksResult = await db.execute({
-                        sql: "SELECT title FROM tasks WHERE assigned_to = ? AND type = 'daily' AND DATE(created_at, 'localtime') = DATE('now', 'localtime')",
-                        args: [req.user?.id!]
+                        sql: "SELECT title FROM tasks WHERE assigned_to = ? AND type = 'daily' AND DATE(created_at) = ?",
+                        args: [req.user?.id!, todayIst]
                     });
 
                     // Create a set of existing daily task titles for quick lookup
@@ -293,9 +301,10 @@ router.get('/', async (req: AuthRequest, res: Response): Promise<void> => {
                     // Generate a new task for any recurring template that hasn't been instantiated today
                     for (const rt of recurringResult.rows) {
                         if (!existingTitles.has(rt.title as string)) {
+                            // Store with IST-based created_at so DATE(created_at) = todayIst
                             await db.execute({
-                                sql: 'INSERT INTO tasks (id, title, description, type, assigned_to, points) VALUES (?, ?, ?, ?, ?, ?)',
-                                args: [generateId(), rt.title as string, rt.description ? (rt.description as string) : null, 'daily', req.user?.id!, 10]
+                                sql: 'INSERT INTO tasks (id, title, description, type, assigned_to, points, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)',
+                                args: [generateId(), rt.title as string, rt.description ? (rt.description as string) : null, 'daily', req.user?.id!, 10, istNow]
                             });
                         }
                     }
@@ -310,15 +319,15 @@ router.get('/', async (req: AuthRequest, res: Response): Promise<void> => {
                     SELECT t.*, u.name as assignee_name 
                     FROM tasks t 
                     JOIN users u ON t.assigned_to = u.id 
-                    WHERE ${targetDateSql === "DATE(?)" ? `DATE(t.created_at, 'localtime') = ${targetDateSql}` : `DATE(t.created_at, 'localtime') = ${targetDateSql}`}
+                    WHERE DATE(t.created_at) = ?
                     ORDER BY t.created_at DESC
                 `,
-                args: targetDateArgs
+                args: [targetDate]
             });
         } else {
             result = await db.execute({
-                sql: `SELECT * FROM tasks WHERE assigned_to = ? AND DATE(created_at, 'localtime') = ${targetDateSql} ORDER BY created_at DESC`,
-                args: [req.user?.id!, ...targetDateArgs]
+                sql: `SELECT * FROM tasks WHERE assigned_to = ? AND DATE(created_at) = ? ORDER BY created_at DESC`,
+                args: [req.user?.id!, targetDate]
             });
         }
         res.json(result.rows);
