@@ -6,6 +6,7 @@ import usersRoutes from './routes/users';
 import tasksRoutes from './routes/tasks';
 import leavesRoutes from './routes/leaves';
 import { db } from './db/client';
+import { setupCronJobs } from './cron';
 
 dotenv.config();
 
@@ -36,14 +37,25 @@ const initializeDb = async () => {
         await db.execute("UPDATE tasks SET points = 10 WHERE type = 'daily' AND points = 0;");
         await db.execute("UPDATE tasks SET points = 25 WHERE type = 'miscellaneous' AND (points IS NULL OR points = 0);");
     } catch (e: any) {
-        // If it fails, the column likely already exists, which is fine
         if (e.message && !e.message.includes('duplicate column name')) {
-            console.log('Runtime migration info:', e.message);
+            console.log('Runtime migration (tasks) info:', e.message);
+        }
+    }
+
+    try {
+        await db.execute("ALTER TABLE leaves ADD COLUMN type TEXT NOT NULL DEFAULT 'planned';");
+        console.log('Added type column to leaves automatically.');
+    } catch (e: any) {
+        if (e.message && !e.message.includes('duplicate column name')) {
+            console.log('Runtime migration (leaves) info:', e.message);
         }
     }
 };
 
 initializeDb().then(() => {
+    // Setup cron for automatic daily task generation
+    setupCronJobs();
+
     if (process.env.NODE_ENV !== 'production') {
         app.listen(PORT, () => {
             console.log(`Server is running on port ${PORT}`);

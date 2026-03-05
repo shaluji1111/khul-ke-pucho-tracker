@@ -265,32 +265,39 @@ router.get('/', async (req: AuthRequest, res: Response): Promise<void> => {
         const targetDateArgs = dateParam ? [dateParam] : [];
 
         if (req.user?.role !== 'admin') {
-            // Only auto-generate recurring tasks for TODAY to avoid logic complexity
             const isToday = !dateParam || dateParam === new Date().toISOString().split('T')[0];
 
             if (isToday) {
-                // Fetch all recurring task templates assigned to the user
-                const recurringResult = await db.execute({
-                    sql: 'SELECT * FROM recurring_tasks WHERE assigned_to = ?',
+                // Check if the user is currently on an approved leave
+                const onLeaveResult = await db.execute({
+                    sql: "SELECT id FROM leaves WHERE user_id = ? AND status = 'approved' AND DATE('now', 'localtime') >= start_date AND DATE('now', 'localtime') <= end_date",
                     args: [req.user?.id!]
                 });
 
-                // Fetch the daily tasks that have already been generated today for the user
-                const todaysTasksResult = await db.execute({
-                    sql: "SELECT title FROM tasks WHERE assigned_to = ? AND type = 'daily' AND DATE(created_at, 'localtime') = DATE('now', 'localtime')",
-                    args: [req.user?.id!]
-                });
+                if (onLeaveResult.rows.length === 0) {
+                    // Fetch all recurring task templates assigned to the user
+                    const recurringResult = await db.execute({
+                        sql: 'SELECT * FROM recurring_tasks WHERE assigned_to = ?',
+                        args: [req.user?.id!]
+                    });
 
-                // Create a set of existing daily task titles for quick lookup
-                const existingTitles = new Set(todaysTasksResult.rows.map(r => r.title as string));
+                    // Fetch the daily tasks that have already been generated today for the user
+                    const todaysTasksResult = await db.execute({
+                        sql: "SELECT title FROM tasks WHERE assigned_to = ? AND type = 'daily' AND DATE(created_at, 'localtime') = DATE('now', 'localtime')",
+                        args: [req.user?.id!]
+                    });
 
-                // Generate a new task for any recurring template that hasn't been instantiated today
-                for (const rt of recurringResult.rows) {
-                    if (!existingTitles.has(rt.title as string)) {
-                        await db.execute({
-                            sql: 'INSERT INTO tasks (id, title, description, type, assigned_to, points) VALUES (?, ?, ?, ?, ?, ?)',
-                            args: [generateId(), rt.title as string, rt.description ? (rt.description as string) : null, 'daily', req.user?.id!, 10]
-                        });
+                    // Create a set of existing daily task titles for quick lookup
+                    const existingTitles = new Set(todaysTasksResult.rows.map(r => r.title as string));
+
+                    // Generate a new task for any recurring template that hasn't been instantiated today
+                    for (const rt of recurringResult.rows) {
+                        if (!existingTitles.has(rt.title as string)) {
+                            await db.execute({
+                                sql: 'INSERT INTO tasks (id, title, description, type, assigned_to, points) VALUES (?, ?, ?, ?, ?, ?)',
+                                args: [generateId(), rt.title as string, rt.description ? (rt.description as string) : null, 'daily', req.user?.id!, 10]
+                            });
+                        }
                     }
                 }
             }

@@ -31,8 +31,9 @@ router.get('/', async (req: AuthRequest, res: Response) => {
 
 // Submit a leave request
 router.post('/', async (req: AuthRequest, res: Response) => {
-    const { start_date, end_date, reason } = req.body;
+    const { start_date, end_date, reason, type } = req.body;
     const userId = req.user?.id!;
+    const leaveType = type === 'unplanned' ? 'unplanned' : 'planned';
 
     if (!start_date || !end_date) {
         return res.status(400).json({ error: 'Start and end dates are required' });
@@ -53,7 +54,7 @@ router.post('/', async (req: AuthRequest, res: Response) => {
 
         const isExplicitlyOpen = weekConfig.rows.length > 0 && weekConfig.rows[0].is_open === 1;
 
-        if (!isExplicitlyOpen) {
+        if (leaveType === 'planned' && !isExplicitlyOpen) {
             const today = new Date();
             today.setHours(0, 0, 0, 0);
 
@@ -89,11 +90,11 @@ router.post('/', async (req: AuthRequest, res: Response) => {
 
         const id = randomUUID();
         await db.execute({
-            sql: 'INSERT INTO leaves (id, user_id, start_date, end_date, reason) VALUES (?, ?, ?, ?, ?)',
-            args: [id, userId, start_date, end_date, reason || null]
+            sql: 'INSERT INTO leaves (id, user_id, start_date, end_date, reason, type) VALUES (?, ?, ?, ?, ?, ?)',
+            args: [id, userId, start_date, end_date, reason || null, leaveType]
         });
 
-        res.status(201).json({ id, start_date, end_date, reason, status: 'pending' });
+        res.status(201).json({ id, start_date, end_date, reason, type: leaveType, status: 'pending' });
     } catch (error) {
         console.error(error);
         res.status(500).json({ error: 'Failed to submit leave request' });
@@ -110,11 +111,62 @@ router.patch('/:id/status', requireAdmin, async (req: AuthRequest, res: Response
     try {
         await db.execute({
             sql: 'UPDATE leaves SET status = ? WHERE id = ?',
-            args: [status, req.params.id]
+            args: [status as string, req.params.id as string]
         });
+
+        // If approved, instantly clean up any daily tasks that overlap with the leave dates
+        if (status === 'approved') {
+            const leaveCheck = await db.execute({
+                sql: 'SELECT user_id, start_date, end_date FROM leaves WHERE id = ?',
+                args: [req.params.id as string]
+            });
+            if (leaveCheck.rows.length > 0) {
+                const leave = leaveCheck.rows[0];
+                await db.execute({
+                    sql: `DELETE FROM tasks WHERE assigned_to = ? AND type = 'daily' AND DATE(created_at, 'localtime') >= DATE(?) AND DATE(created_at, 'localtime') <= DATE(?)`,
+                    args: [leave.user_id as string, leave.start_date as string, leave.end_date as string]
+                });
+            }
+        }
+
         res.json({ message: `Leave ${status}` });
     } catch (error) {
         res.status(500).json({ error: 'Failed to update leave status' });
+    }
+});
+
+// Admin: Declare Company Holiday for all employees
+router.post('/holiday', requireAdmin, async (req: AuthRequest, res: Response) => {
+    const { date, reason } = req.body;
+
+    if (!date) {
+        return res.status(400).json({ error: 'Date is required for a holiday' });
+    }
+
+    try {
+        // Fetch all employees
+        const employees = await db.execute("SELECT id FROM users WHERE role = 'employee'");
+
+        // Create an approved holiday leave for every single employee individually
+        // so that they can optionally delete it if they want to work
+        for (const emp of employees.rows) {
+            const id = randomUUID();
+            await db.execute({
+                sql: 'INSERT INTO leaves (id, user_id, start_date, end_date, reason, type, status) VALUES (?, ?, ?, ?, ?, ?, ?)',
+                args: [id, emp.id as string, date, date, reason || 'Company Holiday', 'holiday', 'approved']
+            });
+
+            // Also delete any existing daily tasks for them on this day just in case they were generated
+            await db.execute({
+                sql: `DELETE FROM tasks WHERE assigned_to = ? AND type = 'daily' AND DATE(created_at, 'localtime') = DATE(?)`,
+                args: [emp.id as string, date]
+            });
+        }
+
+        res.status(201).json({ message: 'Company Holiday declared successfully for all employees' });
+    } catch (error) {
+        console.error('Error creating holiday:', error);
+        res.status(500).json({ error: 'Failed to create company holiday' });
     }
 });
 
@@ -125,6 +177,35 @@ router.get('/week-configs', async (req: AuthRequest, res: Response) => {
         res.json(result.rows);
     } catch (error) {
         res.status(500).json({ error: 'Failed to fetch week configs' });
+    }
+});
+
+// Delete a leave (Allows employees to cancel their leave, OR cancel an auto-generated holiday to work)
+router.delete('/:id', async (req: AuthRequest, res: Response) => {
+    try {
+        const leaveId = req.params.id as string;
+        const userId = req.user?.id! as string;
+
+        // Ensure user can only delete their own leaves unless they are an admin
+        const verifySql = req.user?.role === 'admin'
+            ? 'SELECT id FROM leaves WHERE id = ?'
+            : 'SELECT id FROM leaves WHERE id = ? AND user_id = ?';
+
+        const args: any[] = req.user?.role === 'admin' ? [leaveId] : [leaveId, userId];
+
+        const check = await db.execute({ sql: verifySql, args });
+        if (check.rows.length === 0) {
+            return res.status(403).json({ error: 'Unauthorized to delete this leave' });
+        }
+
+        await db.execute({
+            sql: 'DELETE FROM leaves WHERE id = ?',
+            args: [leaveId]
+        });
+
+        res.json({ message: 'Leave deleted successfully' });
+    } catch (error) {
+        res.status(500).json({ error: 'Failed to delete leave' });
     }
 });
 

@@ -47,6 +47,7 @@ CREATE TABLE IF NOT EXISTS leaves (
     user_id TEXT NOT NULL,
     start_date DATE NOT NULL,
     end_date DATE NOT NULL,
+    type TEXT NOT NULL DEFAULT 'planned',
     status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'approved', 'rejected')),
     reason TEXT,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,

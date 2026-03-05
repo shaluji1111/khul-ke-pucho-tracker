@@ -8,6 +8,9 @@ export default function HolidayRoaster({ isAdmin = false }: { isAdmin?: boolean 
     const [startDate, setStartDate] = useState('');
     const [endDate, setEndDate] = useState('');
     const [reason, setReason] = useState('');
+    const [leaveType, setLeaveType] = useState('planned');
+    const [holidayDate, setHolidayDate] = useState('');
+    const [holidayReason, setHolidayReason] = useState('');
     const [loading, setLoading] = useState(false);
     const [togglingWeek, setTogglingWeek] = useState<string | null>(null);
     const [error, setError] = useState('');
@@ -34,15 +37,41 @@ export default function HolidayRoaster({ isAdmin = false }: { isAdmin?: boolean 
         setError('');
         setLoading(true);
         try {
-            await api.post('/leaves', { start_date: startDate, end_date: endDate, reason });
+            await api.post('/leaves', { start_date: startDate, end_date: endDate, reason, type: leaveType });
             setStartDate('');
             setEndDate('');
             setReason('');
+            setLeaveType('planned');
             fetchData();
         } catch (err: any) {
             setError(err.response?.data?.error || 'Failed to submit leave');
         } finally {
             setLoading(false);
+        }
+    };
+
+    const handleDeclareHoliday = async (e: React.FormEvent) => {
+        e.preventDefault();
+        setError('');
+        setLoading(true);
+        try {
+            await api.post('/leaves/holiday', { date: holidayDate, reason: holidayReason });
+            setHolidayDate('');
+            setHolidayReason('');
+            fetchData();
+        } catch (err: any) {
+            setError(err.response?.data?.error || 'Failed to declare holiday');
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const handleDeleteLeave = async (id: string) => {
+        try {
+            await api.delete(`/leaves/${id}`);
+            fetchData();
+        } catch (e) {
+            console.error(e);
         }
     };
 
@@ -87,24 +116,37 @@ export default function HolidayRoaster({ isAdmin = false }: { isAdmin?: boolean 
                             </h3>
                             <form onSubmit={handleSubmitLeave} className="space-y-4">
                                 <div>
-                                    <label className="block text-xs font-bold uppercase tracking-wider text-muted-foreground mb-1 ml-1">Start Date</label>
-                                    <input
-                                        type="date"
-                                        required
+                                    <label className="block text-xs font-bold uppercase tracking-wider text-muted-foreground mb-1 ml-1">Leave Type</label>
+                                    <select
                                         className="w-full bg-input/50 border border-border/60 rounded-xl px-4 py-2.5 text-sm focus:ring-2 focus:ring-primary/50 outline-none"
-                                        value={startDate}
-                                        onChange={e => setStartDate(e.target.value)}
-                                    />
+                                        value={leaveType}
+                                        onChange={e => setLeaveType(e.target.value)}
+                                    >
+                                        <option value="planned">Planned Leave</option>
+                                        <option value="unplanned">Unplanned (Sick / Emergency)</option>
+                                    </select>
                                 </div>
-                                <div>
-                                    <label className="block text-xs font-bold uppercase tracking-wider text-muted-foreground mb-1 ml-1">End Date</label>
-                                    <input
-                                        type="date"
-                                        required
-                                        className="w-full bg-input/50 border border-border/60 rounded-xl px-4 py-2.5 text-sm focus:ring-2 focus:ring-primary/50 outline-none"
-                                        value={endDate}
-                                        onChange={e => setEndDate(e.target.value)}
-                                    />
+                                <div className="grid grid-cols-2 gap-4">
+                                    <div>
+                                        <label className="block text-xs font-bold uppercase tracking-wider text-muted-foreground mb-1 ml-1">Start Date</label>
+                                        <input
+                                            type="date"
+                                            required
+                                            className="w-full bg-input/50 border border-border/60 rounded-xl px-4 py-2.5 text-sm focus:ring-2 focus:ring-primary/50 outline-none"
+                                            value={startDate}
+                                            onChange={e => setStartDate(e.target.value)}
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="block text-xs font-bold uppercase tracking-wider text-muted-foreground mb-1 ml-1">End Date</label>
+                                        <input
+                                            type="date"
+                                            required
+                                            className="w-full bg-input/50 border border-border/60 rounded-xl px-4 py-2.5 text-sm focus:ring-2 focus:ring-primary/50 outline-none"
+                                            value={endDate}
+                                            onChange={e => setEndDate(e.target.value)}
+                                        />
+                                    </div>
                                 </div>
                                 <div>
                                     <label className="block text-xs font-bold uppercase tracking-wider text-muted-foreground mb-1 ml-1">Reason</label>
@@ -122,49 +164,94 @@ export default function HolidayRoaster({ isAdmin = false }: { isAdmin?: boolean 
                                 >
                                     {loading ? 'Submitting...' : 'Submit Request'}
                                 </button>
-                                <p className="text-[10px] text-muted-foreground text-center font-bold uppercase tracking-tighter">
-                                    Note: 3-day lead time required unless overridden by Admin
-                                </p>
+                                {leaveType === 'planned' ? (
+                                    <p className="text-[10px] text-muted-foreground text-center font-bold uppercase tracking-tighter">
+                                        Note: 3-day lead time required unless overridden by Admin
+                                    </p>
+                                ) : (
+                                    <p className="text-[10px] text-amber-500 text-center font-bold uppercase tracking-tighter">
+                                        Unplanned leaves bypass the notice rule but still require approval
+                                    </p>
+                                )}
                             </form>
                         </div>
                     )}
 
                     {isAdmin && (
-                        <div className="glass border border-border/50 rounded-3xl p-6 shadow-xl">
-                            <h3 className="text-xl font-bold mb-4 flex items-center gap-2">
-                                <Clock className="w-5 h-5 text-accent" /> Week Management
-                            </h3>
-                            <div className="space-y-3">
-                                {[0, 1, 2, 3].map(offset => {
-                                    const d = new Date();
-                                    const day = d.getDay();
-                                    const diff = d.getDate() - day + (day === 0 ? -6 : 1) + (offset * 7);
-                                    const monday = new Date();
-                                    monday.setDate(diff);
+                        <div className="space-y-6">
+                            <div className="glass border border-border/50 rounded-3xl p-6 shadow-xl">
+                                <h3 className="text-xl font-bold mb-4 flex items-center gap-2">
+                                    <Calendar className="w-5 h-5 text-accent" /> Declare Holiday
+                                </h3>
+                                <form onSubmit={handleDeclareHoliday} className="space-y-4">
+                                    <div>
+                                        <label className="block text-xs font-bold uppercase tracking-wider text-muted-foreground mb-1 ml-1">Date</label>
+                                        <input
+                                            type="date"
+                                            required
+                                            className="w-full bg-input/50 border border-border/60 rounded-xl px-4 py-2.5 text-sm focus:ring-2 focus:ring-primary/50 outline-none"
+                                            value={holidayDate}
+                                            onChange={e => setHolidayDate(e.target.value)}
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="block text-xs font-bold uppercase tracking-wider text-muted-foreground mb-1 ml-1">Reason / Event</label>
+                                        <input
+                                            required
+                                            className="w-full bg-input/50 border border-border/60 rounded-xl px-4 py-2.5 text-sm focus:ring-2 focus:ring-primary/50 outline-none"
+                                            placeholder="e.g. Sunday, Diwali, etc."
+                                            value={holidayReason}
+                                            onChange={e => setHolidayReason(e.target.value)}
+                                        />
+                                    </div>
+                                    <button
+                                        disabled={loading}
+                                        className="w-full bg-accent text-accent-foreground py-3 rounded-xl font-black shadow-lg shadow-accent/20 hover:scale-[1.02] active:scale-[0.98] transition-all disabled:opacity-50"
+                                    >
+                                        {loading ? 'Declaring...' : 'Declare Company Holiday'}
+                                    </button>
+                                    <p className="text-[10px] text-muted-foreground text-center font-bold uppercase tracking-tighter">
+                                        Automatically grants all employees this day off.
+                                    </p>
+                                </form>
+                            </div>
 
-                                    const mondayStr = `${monday.getFullYear()}-${String(monday.getMonth() + 1).padStart(2, '0')}-${String(monday.getDate()).padStart(2, '0')}`;
-                                    const config = weekConfigs.find(c => c.week_start_date === mondayStr);
-                                    const isOpen = config?.is_open == 1 || config?.is_open === true;
-                                    const isToggling = togglingWeek === mondayStr;
+                            <div className="glass border border-border/50 rounded-3xl p-6 shadow-xl">
+                                <h3 className="text-xl font-bold mb-4 flex items-center gap-2">
+                                    <Clock className="w-5 h-5 text-emerald-500" /> Week Management
+                                </h3>
+                                <div className="space-y-3">
+                                    {[0, 1, 2, 3].map(offset => {
+                                        const d = new Date();
+                                        const day = d.getDay();
+                                        const diff = d.getDate() - day + (day === 0 ? -6 : 1) + (offset * 7);
+                                        const monday = new Date();
+                                        monday.setDate(diff);
 
-                                    return (
-                                        <div key={mondayStr} className="flex items-center justify-between p-3 bg-muted/30 rounded-2xl border border-border/40">
-                                            <div>
-                                                <p className="text-sm font-black">{offset === 0 ? 'This Week' : offset === 1 ? 'Next Week' : `Week of ${monday.toLocaleDateString()}`}</p>
-                                                <p className="text-[10px] text-muted-foreground font-bold uppercase">{mondayStr}</p>
-                                                {offset === 1 && <p className="text-[9px] text-amber-500 font-bold uppercase mt-0.5">Locks this Friday</p>}
+                                        const mondayStr = `${monday.getFullYear()}-${String(monday.getMonth() + 1).padStart(2, '0')}-${String(monday.getDate()).padStart(2, '0')}`;
+                                        const config = weekConfigs.find(c => c.week_start_date === mondayStr);
+                                        const isOpen = config?.is_open == 1 || config?.is_open === true;
+                                        const isToggling = togglingWeek === mondayStr;
+
+                                        return (
+                                            <div key={mondayStr} className="flex items-center justify-between p-3 bg-muted/30 rounded-2xl border border-border/40">
+                                                <div>
+                                                    <p className="text-sm font-black">{offset === 0 ? 'This Week' : offset === 1 ? 'Next Week' : `Week of ${monday.toLocaleDateString()}`}</p>
+                                                    <p className="text-[10px] text-muted-foreground font-bold uppercase">{mondayStr}</p>
+                                                    {offset === 1 && <p className="text-[9px] text-amber-500 font-bold uppercase mt-0.5">Locks this Friday</p>}
+                                                </div>
+                                                <button
+                                                    disabled={isToggling}
+                                                    onClick={() => toggleWeek(mondayStr, isOpen)}
+                                                    className={`p-2 rounded-xl transition-all ${isToggling ? 'opacity-50 animate-pulse' : ''} ${isOpen ? 'bg-emerald-500/10 text-emerald-500' : 'bg-muted/50 text-muted-foreground hover:text-amber-500 hover:bg-amber-500/10'}`}
+                                                    title={isOpen ? 'Unlocked (Admin Override)' : 'Locked (Standard Rules)'}
+                                                >
+                                                    {isOpen ? <Unlock className="w-5 h-5" /> : <Lock className="w-5 h-5" />}
+                                                </button>
                                             </div>
-                                            <button
-                                                disabled={isToggling}
-                                                onClick={() => toggleWeek(mondayStr, isOpen)}
-                                                className={`p-2 rounded-xl transition-all ${isToggling ? 'opacity-50 animate-pulse' : ''} ${isOpen ? 'bg-emerald-500/10 text-emerald-500' : 'bg-muted/50 text-muted-foreground hover:text-amber-500 hover:bg-amber-500/10'}`}
-                                                title={isOpen ? 'Unlocked (Admin Override)' : 'Locked (Standard Rules)'}
-                                            >
-                                                {isOpen ? <Unlock className="w-5 h-5" /> : <Lock className="w-5 h-5" />}
-                                            </button>
-                                        </div>
-                                    );
-                                })}
+                                        );
+                                    })}
+                                </div>
                             </div>
                         </div>
                     )}
@@ -189,15 +276,28 @@ export default function HolidayRoaster({ isAdmin = false }: { isAdmin?: boolean 
                                     </div>
                                     <div>
                                         <div className="flex items-center gap-2">
-                                            <p className="font-black text-foreground">{new Date(l.start_date).toLocaleDateString()} - {new Date(l.end_date).toLocaleDateString()}</p>
+                                            <p className="font-black text-foreground">{new Date(l.start_date).toLocaleDateString()} {l.start_date !== l.end_date && `- ${new Date(l.end_date).toLocaleDateString()}`}</p>
                                             {isAdmin && <span className="text-xs font-bold text-primary bg-primary/10 px-2 py-0.5 rounded-full">{l.user_name}</span>}
+                                            <span className={`text-[10px] font-bold px-2 py-0.5 rounded-md uppercase tracking-wider ${l.type === 'holiday' ? 'bg-accent/10 text-accent border border-accent/20' :
+                                                l.type === 'unplanned' ? 'bg-amber-500/10 text-amber-500 border border-amber-500/20' :
+                                                    'bg-muted text-muted-foreground'
+                                                }`}>
+                                                {l.type}
+                                            </span>
                                         </div>
                                         <p className="text-sm text-muted-foreground italic">"{l.reason || 'No reason provided'}"</p>
                                     </div>
                                 </div>
 
-                                <div className="flex items-center gap-2">
-                                    {isAdmin && l.status === 'pending' ? (
+                                <div className="flex flex-col sm:flex-row items-end sm:items-center gap-2">
+                                    {l.type === 'holiday' && !isAdmin ? (
+                                        <button
+                                            onClick={() => handleDeleteLeave(l.id)}
+                                            className="text-[10px] font-black uppercase tracking-widest px-3 py-1.5 rounded-lg bg-emerald-500/10 text-emerald-500 border border-emerald-500/20 hover:bg-emerald-500 hover:text-white transition-all"
+                                        >
+                                            Work Today Instead
+                                        </button>
+                                    ) : isAdmin && l.status === 'pending' ? (
                                         <>
                                             <button onClick={() => handleStatusUpdate(l.id, 'approved')} className="p-2 bg-emerald-500/10 text-emerald-500 hover:bg-emerald-500/20 rounded-xl transition-colors">
                                                 <CheckCircle className="w-5 h-5" />
