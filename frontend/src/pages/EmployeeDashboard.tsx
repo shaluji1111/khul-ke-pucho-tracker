@@ -14,7 +14,16 @@ export default function EmployeeDashboard() {
     const user = JSON.parse(localStorage.getItem('user') || '{}');
     const { width, height } = useWindowSize();
     const [activeTab, setActiveTab] = useState<'tasks' | 'roaster'>('tasks');
-    const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
+
+    // Get today's date in local timezone (IST) as YYYY-MM-DD
+    // new Date().toISOString() returns UTC which can be yesterday in IST (12am-5:30am)
+    const getLocalDateStr = () => {
+        const d = new Date();
+        d.setMinutes(d.getMinutes() - d.getTimezoneOffset());
+        return d.toISOString().split('T')[0];
+    };
+
+    const [selectedDate, setSelectedDate] = useState(getLocalDateStr());
 
     // Easter egg states
     const [logoClicks, setLogoClicks] = useState(0);
@@ -178,7 +187,7 @@ export default function EmployeeDashboard() {
                                     <ChevronLeft className="w-4 h-4" />
                                 </button>
                                 <div className="px-2 text-xs font-bold text-foreground min-w-[90px] text-center">
-                                    {selectedDate === new Date().toISOString().split('T')[0] ? 'Today' : selectedDate}
+                                    {selectedDate === getLocalDateStr() ? 'Today' : selectedDate}
                                 </div>
                                 <button
                                     onClick={() => {
