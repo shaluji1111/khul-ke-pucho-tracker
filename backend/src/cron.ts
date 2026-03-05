@@ -12,7 +12,7 @@ export const generateDailyTasksForAllUsers = async () => {
         for (const rt of recurringResult.rows) {
             // Check if the user is currently on an approved leave (or holiday) today
             const onLeaveResult = await db.execute({
-                sql: "SELECT id FROM leaves WHERE user_id = ? AND status = 'approved' AND DATE('now', 'localtime') >= start_date AND DATE('now', 'localtime') <= end_date",
+                sql: "SELECT id FROM leaves WHERE user_id = ? AND status = 'approved' AND DATE('now', 'localtime') >= DATE(start_date) AND DATE('now', 'localtime') <= DATE(end_date)",
                 args: [rt.assigned_to as string]
             });
 

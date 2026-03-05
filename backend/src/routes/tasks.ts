@@ -270,7 +270,7 @@ router.get('/', async (req: AuthRequest, res: Response): Promise<void> => {
             if (isToday) {
                 // Check if the user is currently on an approved leave
                 const onLeaveResult = await db.execute({
-                    sql: "SELECT id FROM leaves WHERE user_id = ? AND status = 'approved' AND DATE('now', 'localtime') >= start_date AND DATE('now', 'localtime') <= end_date",
+                    sql: "SELECT id FROM leaves WHERE user_id = ? AND status = 'approved' AND DATE('now', 'localtime') >= DATE(start_date) AND DATE('now', 'localtime') <= DATE(end_date)",
                     args: [req.user?.id!]
                 });
 
