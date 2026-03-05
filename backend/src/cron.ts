@@ -1,4 +1,3 @@
-import cron from 'node-cron';
 import { randomUUID } from 'crypto';
 import { db } from './db/client';
 
@@ -40,13 +39,4 @@ export const generateDailyTasksForAllUsers = async () => {
     }
 };
 
-// Setup cron job to run every day at midnight (00:00)
-export const setupCronJobs = () => {
-    cron.schedule('0 0 * * *', () => {
-        console.log('Midnight reached. Triggering daily tasks generation...');
-        generateDailyTasksForAllUsers();
-    });
 
-    // Also run once on startup just in case the server was down at midnight
-    generateDailyTasksForAllUsers();
-};

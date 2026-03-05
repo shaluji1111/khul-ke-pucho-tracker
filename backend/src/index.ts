@@ -6,7 +6,7 @@ import usersRoutes from './routes/users';
 import tasksRoutes from './routes/tasks';
 import leavesRoutes from './routes/leaves';
 import { db } from './db/client';
-import { setupCronJobs } from './cron';
+import { generateDailyTasksForAllUsers } from './cron';
 
 dotenv.config();
 
@@ -22,6 +22,16 @@ app.use(express.json());
 
 app.get('/api/health', (req, res) => {
     res.status(200).json({ status: 'ok', message: 'API is running' });
+});
+
+// Vercel-compatible cron endpoint
+app.get('/api/cron/daily', async (req, res) => {
+    try {
+        await generateDailyTasksForAllUsers();
+        res.status(200).json({ success: true, message: 'Daily tasks generated' });
+    } catch (e) {
+        res.status(500).json({ error: 'Failed' });
+    }
 });
 
 app.use('/api/auth', authRoutes);
@@ -53,9 +63,6 @@ const initializeDb = async () => {
 };
 
 initializeDb().then(() => {
-    // Setup cron for automatic daily task generation
-    setupCronJobs();
-
     if (process.env.NODE_ENV !== 'production') {
         app.listen(PORT, () => {
             console.log(`Server is running on port ${PORT}`);
