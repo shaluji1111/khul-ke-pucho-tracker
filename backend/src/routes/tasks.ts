@@ -262,49 +262,45 @@ router.get('/', async (req: AuthRequest, res: Response): Promise<void> => {
     try {
         const dateParam = req.query.date as string; // Expects YYYY-MM-DD
 
-        // Derive today's date in IST (UTC+5:30) — same timezone as the user's browser
+        // Compute today's date in IST (UTC+5:30) for the isToday check
         const nowUtcMs = Date.now();
         const istOffsetMs = 5.5 * 60 * 60 * 1000;
         const todayIst = new Date(nowUtcMs + istOffsetMs).toISOString().split('T')[0];
-        // IST datetime string for inserting records (so DATE(created_at) matches IST dates)
-        const istNow = new Date(nowUtcMs + istOffsetMs).toISOString().replace('T', ' ').split('.')[0];
 
-        // Use dateParam if provided, otherwise fall back to today in IST
+        // targetDate: what date the user is viewing (IST)
         const targetDate = dateParam || todayIst;
 
         if (req.user?.role !== 'admin') {
             const isToday = targetDate === todayIst;
 
             if (isToday) {
-                // Check if the user is currently on an approved leave (compare against IST today)
+                // Check if the user is on approved leave today (compare IST date as string)
                 const onLeaveResult = await db.execute({
                     sql: "SELECT id FROM leaves WHERE user_id = ? AND status = 'approved' AND ? >= DATE(start_date) AND ? <= DATE(end_date)",
                     args: [req.user?.id!, todayIst, todayIst]
                 });
 
                 if (onLeaveResult.rows.length === 0) {
-                    // Fetch all recurring task templates assigned to the user
+                    // Fetch all recurring templates for this user
                     const recurringResult = await db.execute({
                         sql: 'SELECT * FROM recurring_tasks WHERE assigned_to = ?',
                         args: [req.user?.id!]
                     });
 
-                    // Fetch the daily tasks already generated today (using DATE(created_at) = todayIst)
+                    // Fetch daily tasks already generated today (in IST) using +5:30 offset
                     const todaysTasksResult = await db.execute({
-                        sql: "SELECT title FROM tasks WHERE assigned_to = ? AND type = 'daily' AND DATE(created_at) = ?",
+                        sql: "SELECT title FROM tasks WHERE assigned_to = ? AND type = 'daily' AND DATE(datetime(created_at, '+5:30:00')) = ?",
                         args: [req.user?.id!, todayIst]
                     });
 
-                    // Create a set of existing daily task titles for quick lookup
                     const existingTitles = new Set(todaysTasksResult.rows.map(r => r.title as string));
 
-                    // Generate a new task for any recurring template that hasn't been instantiated today
+                    // Generate tasks for any recurring template not yet instantiated today
                     for (const rt of recurringResult.rows) {
                         if (!existingTitles.has(rt.title as string)) {
-                            // Store with IST-based created_at so DATE(created_at) = todayIst
                             await db.execute({
-                                sql: 'INSERT INTO tasks (id, title, description, type, assigned_to, points, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)',
-                                args: [generateId(), rt.title as string, rt.description ? (rt.description as string) : null, 'daily', req.user?.id!, 10, istNow]
+                                sql: 'INSERT INTO tasks (id, title, description, type, assigned_to, points) VALUES (?, ?, ?, ?, ?, ?)',
+                                args: [generateId(), rt.title as string, rt.description ? (rt.description as string) : null, 'daily', req.user?.id!, 10]
                             });
                         }
                     }
@@ -312,6 +308,7 @@ router.get('/', async (req: AuthRequest, res: Response): Promise<void> => {
             }
         }
 
+        // Fetch tasks, converting created_at from UTC to IST using +5:30 offset for date comparison
         let result;
         if (req.user?.role === 'admin') {
             result = await db.execute({
@@ -319,14 +316,14 @@ router.get('/', async (req: AuthRequest, res: Response): Promise<void> => {
                     SELECT t.*, u.name as assignee_name 
                     FROM tasks t 
                     JOIN users u ON t.assigned_to = u.id 
-                    WHERE DATE(t.created_at) = ?
+                    WHERE DATE(datetime(t.created_at, '+5:30:00')) = ?
                     ORDER BY t.created_at DESC
                 `,
                 args: [targetDate]
             });
         } else {
             result = await db.execute({
-                sql: `SELECT * FROM tasks WHERE assigned_to = ? AND DATE(created_at) = ? ORDER BY created_at DESC`,
+                sql: `SELECT * FROM tasks WHERE assigned_to = ? AND DATE(datetime(created_at, '+5:30:00')) = ? ORDER BY created_at DESC`,
                 args: [req.user?.id!, targetDate]
             });
         }
@@ -337,17 +334,19 @@ router.get('/', async (req: AuthRequest, res: Response): Promise<void> => {
     }
 });
 
+
 // Admin performance metrics
 router.get('/metrics', requireAdmin, async (req: AuthRequest, res: Response): Promise<void> => {
     try {
         const startDate = req.query.startDate as string;
         const endDate = req.query.endDate as string;
 
-        let dateCondition = "DATE(t.created_at, 'localtime') >= DATE('now', 'localtime', '-7 days')";
+        // Use IST offset; Turso is UTC-based so 'localtime' = UTC. Use +5:30 offset instead.
+        let dateCondition = "DATE(datetime(t.created_at, '+5:30:00')) >= DATE(datetime('now', '+5:30:00'), '-7 days')";
         let args: any[] = [];
 
         if (startDate && endDate) {
-            dateCondition = "DATE(t.created_at, 'localtime') >= DATE(?) AND DATE(t.created_at, 'localtime') <= DATE(?)";
+            dateCondition = "DATE(datetime(t.created_at, '+5:30:00')) >= DATE(?) AND DATE(datetime(t.created_at, '+5:30:00')) <= DATE(?)";
             args = [startDate, endDate];
         }
 
@@ -369,7 +368,7 @@ router.get('/metrics', requireAdmin, async (req: AuthRequest, res: Response): Pr
       GROUP BY u.id, u.name
     `;
 
-        // We repeat the arguments because dateCondition is used 6 times in the query
+        // dateCondition is used 6 times in the query
         const finalArgs = [...args, ...args, ...args, ...args, ...args, ...args];
 
         const result = await db.execute({
@@ -397,11 +396,12 @@ router.get('/report/:userId', requireAdmin, async (req: AuthRequest, res: Respon
         const startDate = typeof req.query.startDate === 'string' ? req.query.startDate : undefined;
         const endDate = typeof req.query.endDate === 'string' ? req.query.endDate : undefined;
 
-        let dateCondition = "DATE(t.created_at, 'localtime') >= DATE('now', 'localtime', '-7 days')";
+        // Use +5:30 offset; Turso is UTC-based so 'localtime' resolves to UTC, not IST
+        let dateCondition = "DATE(datetime(t.created_at, '+5:30:00')) >= DATE(datetime('now', '+5:30:00'), '-7 days')";
         if (timeframe === '30d') {
-            dateCondition = "DATE(t.created_at, 'localtime') >= DATE('now', 'localtime', '-30 days')";
+            dateCondition = "DATE(datetime(t.created_at, '+5:30:00')) >= DATE(datetime('now', '+5:30:00'), '-30 days')";
         } else if (startDate && endDate) {
-            dateCondition = "DATE(t.created_at, 'localtime') >= DATE(?) AND DATE(t.created_at, 'localtime') <= DATE(?)";
+            dateCondition = "DATE(datetime(t.created_at, '+5:30:00')) >= DATE(?) AND DATE(datetime(t.created_at, '+5:30:00')) <= DATE(?)";
         }
 
         const args: string[] = [];
@@ -413,11 +413,11 @@ router.get('/report/:userId', requireAdmin, async (req: AuthRequest, res: Respon
         const pointsTrend = await db.execute({
             sql: `
                 SELECT 
-                    DATE(created_at, 'localtime') as date,
+                    DATE(datetime(created_at, '+5:30:00')) as date,
                     SUM(CASE WHEN status = 'completed' THEN points ELSE 0 END) as points
                 FROM tasks t
                 WHERE assigned_to = ? AND ${dateCondition}
-                GROUP BY DATE(created_at, 'localtime')
+                GROUP BY DATE(datetime(created_at, '+5:30:00'))
                 ORDER BY date ASC
             `,
             args: [userId as any, ...args]
@@ -429,7 +429,7 @@ router.get('/report/:userId', requireAdmin, async (req: AuthRequest, res: Respon
                 SELECT 
                     SUM(CASE WHEN status = 'completed' AND (deadline IS NULL OR completed_at <= deadline) THEN 1 ELSE 0 END) as on_time,
                     SUM(CASE WHEN status = 'completed' AND deadline IS NOT NULL AND completed_at > deadline THEN 1 ELSE 0 END) as late,
-                    SUM(CASE WHEN status != 'completed' AND deadline IS NOT NULL AND DATE('now') > DATE(deadline) THEN 1 ELSE 0 END) as missed
+                    SUM(CASE WHEN status != 'completed' AND deadline IS NOT NULL AND datetime('now') > datetime(deadline) THEN 1 ELSE 0 END) as missed
                 FROM tasks t
                 WHERE assigned_to = ? AND ${dateCondition}
             `,
